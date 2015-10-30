@@ -1,43 +1,21 @@
 
 package com.techjar.ledcm;
 
-import com.techjar.ledcm.gui.screen.ScreenMainControl;
-import com.techjar.ledcm.hardware.ArduinoLEDManager;
-import com.techjar.ledcm.hardware.CommThread;
-import com.techjar.ledcm.hardware.LEDArray;
-import com.techjar.ledcm.hardware.LEDManager;
-import com.techjar.ledcm.hardware.LEDUtil;
-import com.techjar.ledcm.hardware.SerialPortHandler;
-import com.techjar.ledcm.hardware.SpectrumAnalyzer;
-import com.techjar.ledcm.hardware.TLC5940LEDManager;
-import com.techjar.ledcm.hardware.TestHugeLEDManager;
-import com.techjar.ledcm.hardware.TestReallyHugeLEDManager;
+import com.techjar.ledcm.hardware.*;
 import com.techjar.ledcm.hardware.animation.*;
-import com.techjar.ledcm.util.Angle;
-import com.techjar.ledcm.util.AxisAlignedBB;
-import com.techjar.ledcm.util.Dimension3D;
-import com.techjar.ledcm.util.Direction;
-import com.techjar.ledcm.util.LEDCubeOctreeNode;
-import com.techjar.ledcm.util.Model;
-import com.techjar.ledcm.util.Quaternion;
-import com.techjar.ledcm.util.Util;
-import com.techjar.ledcm.util.Vector3;
+import com.techjar.ledcm.util.*;
 import com.techjar.ledcm.util.input.InputBinding;
 import com.techjar.ledcm.util.input.InputBindingManager;
 import com.techjar.ledcm.util.input.InputInfo;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
 import org.lwjgl.input.Controller;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.util.Color;
+
+import java.io.IOException;
+import java.util.*;
 
 /**
  *
@@ -63,7 +41,9 @@ public class LEDCube {
     @Getter private Model model;
 
     public LEDCube() {
-        ledManager = new ArduinoLEDManager(4, false);
+        ledManager = new STP16Monochrome16();
+        //ledManager = new STP16Manager(false);
+        //ledManager = new ArduinoLEDManager(4, false);
         //ledManager = new TLC5940LEDManager(true);
         //ledManager = new TestHugeLEDManager(true);
         //ledManager = new TestReallyHugeLEDManager(true);
@@ -454,6 +434,8 @@ public class LEDCube {
         addAnimation(new AnimationNone());
         addAnimation(new AnimationSpectrumBars());
         addAnimation(new AnimationSpectrumShooters());
+        addAnimation(new AnimationSpectrumBars16());
+        addAnimation(new AnimationSpectrumShooters16());
         //addAnimation(new AnimationIndividualTest());
         addAnimation(new AnimationStaticFill());
         addAnimation(new AnimationPulsate());
