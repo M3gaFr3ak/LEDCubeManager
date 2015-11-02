@@ -28,3 +28,6 @@ config.yml
 
 # Keep This Shit
 !/lib/*.jar
+LEDCubeManager.iml
+ffmpeg.exe
+src/META-INF/MANIFEST.MF

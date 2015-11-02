@@ -463,6 +463,10 @@ public class LEDCube {
         addAnimation(new AnimationFaucetFill());
         addAnimation(new AnimationFaucetFillRainbow());
         addAnimation(new AnimationSlidingBoxes());
+
+        addAnimation(new AnimationSpectrumBars16());
+        addAnimation(new AnimationSpectrumShooters16());
+        addAnimation(new AnimationWave());
         for (Animation anim : animations.values()) {
             anim.postLoadInitOptions();
         }
