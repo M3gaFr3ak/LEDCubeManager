@@ -13,6 +13,9 @@ import org.lwjgl.input.Controller;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.util.Color;
+import org.lwjgl.util.vector.Matrix4f;
+import org.lwjgl.util.vector.Vector3f;
+import org.lwjgl.util.vector.Vector4f;
 
 import java.io.IOException;
 import java.util.*;
@@ -45,8 +48,9 @@ public class LEDCube {
         //ledManager = new STP16Manager(false);
         //ledManager = new ArduinoLEDManager(4, false);
         //ledManager = new TLC5940LEDManager(true);
-        //ledManager = new TestHugeLEDManager(true);
-        //ledManager = new TestReallyHugeLEDManager(true);
+        //ledManager = new TestLEDManager(true, 16, 16, 16);
+        Dimension3D dim = ledManager.getDimensions();
+        centerPoint = new Vector3f((dim.x - 1) / 2F, (dim.y - 1) / 2F, (dim.z - 1) / 2F);
         highlight = new boolean[ledManager.getLEDCount()];
         model = LEDCubeManager.getModelManager().getModel("led.model");
         initOctree();
@@ -63,8 +67,7 @@ public class LEDCube {
         spectrumAnalyzer = new SpectrumAnalyzer();
         commThread = new CommThread(new SerialPortHandler(LEDCubeManager.getSerialPortName()));
         commThread.start();
-        LEDCubeManager.getCamera().setPosition(new Vector3(-80, 85, 28));
-        LEDCubeManager.getCamera().setAngle(new Angle(-31, -90, 0));
+        resetCameraPosition();
     }
 
     private void computeLEDHighlight() {
@@ -130,17 +133,18 @@ public class LEDCube {
         float mult = ledSpaceMult;
 
         Dimension3D dim = ledManager.getDimensions();
-        LEDArray ledArray = ledManager.getLEDArray();
+        LEDArray ledArray = previewTransform ? ledManager.getLEDArray().getTransformed() : ledManager.getLEDArray();
         for (int y = 0; y < dim.y; y++) {
             for (int z = 0; z < dim.z; z++) {
                 for (int x = 0; x < dim.x; x++) {
                     if (isLEDWithinIsolation(x, y, z)) {
-                        Vector3 pos = new Vector3(z * mult, y * mult, x * mult);
+                        Vector3 pos = new Vector3(x * mult, y * mult, z * mult);
                         Color color;
                         if (trueColor) {
                             Color ledColor = ledArray.getLEDColorReal(x, y, z);
                             color = new Color(Math.round(ledColor.getRed() * ledManager.getFactor()), Math.round(ledColor.getGreen() * ledManager.getFactor()), Math.round(ledColor.getBlue() * ledManager.getFactor()));
-                        } else color = ledArray.getLEDColor(x, y, z);
+                        } else
+                            color = ledArray.getLEDColor(x, y, z);
                         faceCount += model.render(pos, new Quaternion(), color);
                     }
                 }
@@ -152,7 +156,7 @@ public class LEDCube {
                 for (int z = 0; z < dim.z; z++) {
                     if (highlight[Util.encodeCubeVector(x, y, z)]) {
                         if (isLEDWithinIsolation(x, y, z)) {
-                            Vector3 pos = new Vector3(z * mult, y * mult, x * mult);
+                            Vector3 pos = new Vector3(x * mult, y * mult, z * mult);
                             faceCount += model.render(pos, new Quaternion(), new Color(paintColor.getRed(), paintColor.getGreen(), paintColor.getBlue(), 32), new Vector3(1.2F, 1.2F, 1.2F));
                         }
                     }
@@ -177,14 +181,28 @@ public class LEDCube {
         LEDCubeManager.getInstance().getScreenMainControl().blueColorSlider.setValue(color.getBlue() / 255F);
     }
 
+    public void resetCameraPosition() {
+        LEDCubeManager.getCamera().setPosition(new Vector3(-80, 85, 28));
+        LEDCubeManager.getCamera().setAngle(new Angle(-31, -90, 0));
+        // Some crazy code I experimented with...
+        /*Dimension3D dim = ledManager.getDimensions();
+        int distDim = dim.x > dim.z && dim.x > dim.y * 2 ? dim.x / 2 : (dim.z > dim.y * 2 ? dim.z / 2 : dim.y);
+        int heightDim = Math.max(dim.y, dim.z);
+        Angle angle = new Angle(-31, -90, 0);
+        LEDCubeManager.getCamera().setPosition(Util.convertVector(centerPoint).multiply(ledSpaceMult).subtract(new Vector3(0, ledSpaceMult * (heightDim / 8), 0)).add(angle.forward().negate().multiply(130 * (distDim / 8))));
+        LEDCubeManager.getCamera().setAngle(angle);*/
+    }
+
     private void initBindings() {
-        InputBindingManager.addBinding(new InputBinding("reloadanimation", "Reload Current", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_R)) {
+        InputBindingManager.addBinding(new InputBinding("reloadanimation", "Reload Current", "Animation", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_R)) {
+
             @Override
             public boolean onPressed() {
                 if (commThread.getCurrentSequence() == null) {
                     Animation anim = commThread.getCurrentAnimation();
                     try {
                         animations.put(anim.getName(), anim.getClass().newInstance());
+                        animations.get(anim.getName()).postLoadInitOptions();
                         commThread.setCurrentAnimation(animations.get(anim.getName()));
                     } catch (Exception ex) {
                         ex.printStackTrace();
@@ -199,7 +217,8 @@ public class LEDCube {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("reloadallanimations", "Reload All", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_Y)) {
+        InputBindingManager.addBinding(new InputBinding("reloadallanimations", "Reload All", "Animation", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_Y)) {
+
             @Override
             public boolean onPressed() {
                 if (commThread.getCurrentSequence() == null) {
@@ -214,11 +233,11 @@ public class LEDCube {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("resetcamera", "Reset Camera", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F)) {
+        InputBindingManager.addBinding(new InputBinding("resetcamera", "Reset Position", "Camera", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F)) {
+
             @Override
             public boolean onPressed() {
-                LEDCubeManager.getCamera().setPosition(new Vector3(-80, 85, 28));
-                LEDCubeManager.getCamera().setAngle(new Angle(-31, -90, 0));
+                resetCameraPosition();
                 return false;
             }
 
@@ -227,7 +246,8 @@ public class LEDCube {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("togglecolor", "Toggle Color", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_H)) {
+        InputBindingManager.addBinding(new InputBinding("togglecolor", "Toggle Color", "Cube", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_H)) {
+
             @Override
             public boolean onPressed() {
                 trueColor = !trueColor;
@@ -243,7 +263,8 @@ public class LEDCube {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("clearleds", "Clear LEDs", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_C)) {
+        InputBindingManager.addBinding(new InputBinding("clearleds", "Clear LEDs", "Cube", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_C)) {
+
             @Override
             public boolean onPressed() {
                 LEDUtil.clear(ledManager);
@@ -255,7 +276,8 @@ public class LEDCube {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("freezeanimation", "Freeze", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_X)) {
+        InputBindingManager.addBinding(new InputBinding("freezeanimation", "Freeze", "Animation", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_X)) {
+
             @Override
             public boolean onPressed() {
                 commThread.setFrozen(!commThread.isFrozen());
@@ -267,7 +289,8 @@ public class LEDCube {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("paintleds", "Paint LEDs", true, new InputInfo(InputInfo.Type.MOUSE, 0)) {
+        InputBindingManager.addBinding(new InputBinding("paintleds", "Paint LEDs", "Cube", true, new InputInfo(InputInfo.Type.MOUSE, 0)) {
+
             @Override
             public boolean onPressed() {
                 if (!Mouse.isGrabbed()) {
@@ -284,23 +307,24 @@ public class LEDCube {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("floodfill", "Flood Fill", true, new InputInfo(InputInfo.Type.MOUSE, 1)) {
+        InputBindingManager.addBinding(new InputBinding("floodfill", "Flood Fill", "Cube", true, new InputInfo(InputInfo.Type.MOUSE, 1)) {
+
             @Override
             public boolean onPressed() {
                 if (!Mouse.isGrabbed()) {
                     if (cursorTrace != null) {
                         Dimension3D dim = ledManager.getDimensions();
                         LEDArray ledArray = ledManager.getLEDArray();
-                        Color targetColor = ledArray.getLEDColor((int)cursorTrace.getX(), (int)cursorTrace.getY(), (int)cursorTrace.getZ());
+                        Color targetColor = ledArray.getLEDColor((int) cursorTrace.getX(), (int) cursorTrace.getY(), (int) cursorTrace.getZ());
                         if (!targetColor.equals(paintColor)) {
                             boolean[] processed = new boolean[ledManager.getLEDCount()];
                             LinkedList<Vector3> stack = new LinkedList<>();
                             stack.push(cursorTrace);
                             while (!stack.isEmpty()) {
                                 Vector3 current = stack.pop();
-                                Color color = ledArray.getLEDColor((int)current.getX(), (int)current.getY(), (int)current.getZ());
+                                Color color = ledArray.getLEDColor((int) current.getX(), (int) current.getY(), (int) current.getZ());
                                 if (color.equals(targetColor) && isLEDWithinIsolation(current)) {
-                                    ledManager.setLEDColor((int)current.getX(), (int)current.getY(), (int)current.getZ(), paintColor);
+                                    ledManager.setLEDColor((int) current.getX(), (int) current.getY(), (int) current.getZ(), paintColor);
                                     processed[Util.encodeCubeVector(current)] = true;
                                     for (int i = 0; i < 6; i++) {
                                         Vector3 offset = Direction.values()[i].getVector();
@@ -326,14 +350,16 @@ public class LEDCube {
     }
 
     private void initOctree() {
-        Dimension3D dim =  ledManager.getDimensions();
-        if (/*dim.x != dim.y || dim.x != dim.z || dim.y != dim.z ||*/ !Util.isPowerOfTwo(dim.x) || !Util.isPowerOfTwo(dim.y) || !Util.isPowerOfTwo(dim.z)) return; // Non-cubes and non-powers-of-two need special handling here
-        int minDim = Math.min(dim.x, Math.min(dim.y, dim.z));
+        Dimension3D dim = ledManager.getDimensions();
+        int minDim = Util.getNextPowerOfTwo(Math.min(dim.x, Math.min(dim.y, dim.z)));
         float octreeSize = ledSpaceMult * minDim;
         ArrayList<LEDCubeOctreeNode> list = new ArrayList<>();
-        for (int x = 0; x < dim.x; x += minDim) {
-            for (int y = 0; y < dim.y; y += minDim) {
-                for (int z = 0; z < dim.z; z += minDim) {
+        int multX = (int) Math.ceil(dim.x / (float) minDim) * minDim;
+        int multY = (int) Math.ceil(dim.y / (float) minDim) * minDim;
+        int multZ = (int) Math.ceil(dim.z / (float) minDim) * minDim;
+        for (int x = 0; x < multX; x += minDim) {
+            for (int y = 0; y < multY; y += minDim) {
+                for (int z = 0; z < multZ; z += minDim) {
                     Vector3 offset = new Vector3(octreeSize * (x / minDim), octreeSize * (y / minDim), octreeSize * (z / minDim));
                     LEDCubeOctreeNode octree = new LEDCubeOctreeNode(new AxisAlignedBB(new Vector3(-ledSpaceMult / 2, -ledSpaceMult / 2, -ledSpaceMult / 2).add(offset), new Vector3(octreeSize + (ledSpaceMult / 2), octreeSize + (ledSpaceMult / 2), octreeSize + (ledSpaceMult / 2)).add(offset)));
                     recursiveFillOctree(octree, octreeSize / 2, minDim, new Vector3(x, y, z));
@@ -354,27 +380,31 @@ public class LEDCube {
             float yOffset = y * size;
             float zOffset = z * size;
             if (count > 1) {
+                Dimension3D dim = ledManager.getDimensions();
+                Vector3 nextLedPos = ledPos.add(new Vector3((count / 2) * x, (count / 2) * y, (count / 2) * z));
+                if (nextLedPos.getX() >= dim.x || nextLedPos.getY() >= dim.y || nextLedPos.getZ() >= dim.z)
+                    continue;
                 LEDCubeOctreeNode newNode = new LEDCubeOctreeNode(new AxisAlignedBB(nodeAABB.getMinPoint().add(new Vector3(xOffset, yOffset, zOffset)), nodeAABB.getMinPoint().add(new Vector3(xOffset + size, yOffset + size, zOffset + size))));
                 node.setNode(i, newNode);
-                recursiveFillOctree(newNode, size / 2, count / 2, ledPos.add(new Vector3((count / 2) * x, (count / 2) * y, (count / 2) * z)));
+                recursiveFillOctree(newNode, size / 2, count / 2, nextLedPos);
             } else {
                 AxisAlignedBB modelAABB = model.getAABB();
-                node.setNode(i, new LEDCubeOctreeNode(new AxisAlignedBB(modelAABB.getMinPoint().add(ledPos.multiply(ledSpaceMult)), modelAABB.getMaxPoint().add(ledPos.multiply(ledSpaceMult))), new Vector3(ledPos.getZ(), ledPos.getY(), ledPos.getX())));
+                node.setNode(i, new LEDCubeOctreeNode(new AxisAlignedBB(modelAABB.getMinPoint().add(ledPos.multiply(ledSpaceMult)), modelAABB.getMaxPoint().add(ledPos.multiply(ledSpaceMult))), ledPos));
             }
         }
     }
 
     private Vector3 recursiveIntersectOctree(LEDCubeOctreeNode node, Vector3 point) {
-        if (node.getNode(0) != null) {
-            for (int i = 0; i < 8; i++) {
-                LEDCubeOctreeNode nextNode = node.getNode(i);
-                if (nextNode.getAABB().containsPoint(point)) {
-                    Vector3 ret = recursiveIntersectOctree(nextNode, point);
-                    if (ret != null) return ret;
-                }
-            }
-        } else {
+        if (node.getLEDPosition() != null) {
             return node.getLEDPosition();
+        }
+        for (int i = 0; i < 8; i++) {
+            LEDCubeOctreeNode nextNode = node.getNode(i);
+            if (nextNode != null && nextNode.getAABB().containsPoint(point)) {
+                Vector3 ret = recursiveIntersectOctree(nextNode, point);
+                if (ret != null)
+                    return ret;
+            }
         }
         return null;
     }
@@ -386,16 +416,15 @@ public class LEDCube {
 
         float mult = ledSpaceMult;
         Dimension3D dim = ledManager.getDimensions();
-        Model model = LEDCubeManager.getModelManager().getModel("led.model");
         for (float step = 1; step < 5000; step += 2) {
             Vector3 rayPos = position.add(direction.multiply(step));
             if (octrees == null) {
                 for (int y = 0; y < dim.y; y++) {
                     for (int z = 0; z < dim.z; z++) {
                         for (int x = 0; x < dim.x; x++) {
-                            float xx = z * mult;
+                            float xx = x * mult;
                             float yy = y * mult;
-                            float zz = x * mult;
+                            float zz = z * mult;
                             Vector3 pos = new Vector3(xx, yy, zz);
                             if (model.getAABB().containsPoint(pos, rayPos) && isLEDWithinIsolation(x, y, z)) {
                                 return new Vector3(x, y, z);
@@ -407,10 +436,11 @@ public class LEDCube {
                 Vector3 ret = null;
                 for (int i = 0; i < octrees.length; i++) {
                     ret = recursiveIntersectOctree(octrees[i], rayPos);
-                    if (ret != null) break;
+                    if (ret != null)
+                        break;
                 }
                 if (ret != null) {
-                    if (isLEDWithinIsolation((int)ret.getX(), (int)ret.getY(), (int)ret.getZ())) {
+                    if (isLEDWithinIsolation((int) ret.getX(), (int) ret.getY(), (int) ret.getZ())) {
                         return ret;
                     }
                 }
@@ -421,11 +451,39 @@ public class LEDCube {
 
     public boolean isLEDWithinIsolation(int x, int y, int z) {
         switch (layerIsolation) {
-            case 1: return x == selectedLayer;
-            case 2: return y == selectedLayer;
-            case 3: return z == selectedLayer;
+            case 1:
+                return x == selectedLayer;
+            case 2:
+                return y == selectedLayer;
+            case 3:
+                return z == selectedLayer;
         }
         return true;
+    }
+
+    public void rotateTransform(float radians, Vector3 axis) {
+        transform.translate(centerPoint);
+        transform.rotate(radians, Util.convertVector(axis));
+        transform.translate(centerPoint.negate(null));
+    }
+
+    public void setReflection(boolean x, boolean y, boolean z) {
+        reflectX = x;
+        reflectY = y;
+        reflectZ = z;
+    }
+
+    public Vector3 applyTransform(Vector3 vector) {
+        Dimension3D dim = ledManager.getDimensions();
+        vector = vector.copy();
+        if (reflectX)
+            vector.setX((dim.x - 1) - vector.getX());
+        if (reflectY)
+            vector.setY((dim.y - 1) - vector.getY());
+        if (reflectZ)
+            vector.setZ((dim.z - 1) - vector.getZ());
+        Vector4f vec = Matrix4f.transform(transform, new Vector4f(vector.getX(), vector.getY(), vector.getZ(), 1), null);
+        return new Vector3(Math.round(vec.x), Math.round(vec.y), Math.round(vec.z));
     }
 
     public void loadAnimations() {
@@ -434,8 +492,6 @@ public class LEDCube {
         addAnimation(new AnimationNone());
         addAnimation(new AnimationSpectrumBars());
         addAnimation(new AnimationSpectrumShooters());
-        addAnimation(new AnimationSpectrumBars16());
-        addAnimation(new AnimationSpectrumShooters16());
         //addAnimation(new AnimationIndividualTest());
         addAnimation(new AnimationStaticFill());
         addAnimation(new AnimationPulsate());
@@ -463,10 +519,8 @@ public class LEDCube {
         addAnimation(new AnimationFaucetFill());
         addAnimation(new AnimationFaucetFillRainbow());
         addAnimation(new AnimationSlidingBoxes());
-
-        addAnimation(new AnimationSpectrumBars16());
-        addAnimation(new AnimationSpectrumShooters16());
         addAnimation(new AnimationWave());
+
         for (Animation anim : animations.values()) {
             anim.postLoadInitOptions();
         }
@@ -477,7 +531,8 @@ public class LEDCube {
 
     private void addAnimation(Animation animation) {
         animations.put(animation.getName(), animation);
-        if (!animation.isHidden()) animationNames.add(animation.getName());
+        if (!animation.isHidden())
+            animationNames.add(animation.getName());
     }
 
     public Map<String, Animation> getAnimations() {

@@ -25,7 +25,7 @@ import com.techjar.ledcm.hardware.CommThread;
 import com.techjar.ledcm.hardware.LEDUtil;
 import com.techjar.ledcm.hardware.SpectrumAnalyzer;
 import com.techjar.ledcm.hardware.TLC5940LEDManager;
-import com.techjar.ledcm.hardware.TestHugeLEDManager;
+import com.techjar.ledcm.hardware.TestLEDManager;
 import com.techjar.ledcm.hardware.animation.*;
 import com.techjar.ledcm.hardware.tcp.TCPServer;
 import com.techjar.ledcm.hardware.tcp.packet.Packet;
@@ -625,20 +625,7 @@ public class LEDCubeManager {
     }
 
     private void initBindings() {
-        InputBindingManager.addBinding(new InputBinding("movecamera", "Move Camera", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_ESCAPE)) {
-            @Override
-            public boolean onPressed() {
-                Mouse.setGrabbed(!Mouse.isGrabbed());
-                if (Mouse.isGrabbed()) Mouse.setCursorPosition(displayMode.getWidth() / 2, displayMode.getHeight() / 2);
-                return false;
-            }
-
-            @Override
-            public boolean onReleased() {
-                return true;
-            }
-        });
-        InputBindingManager.addBinding(new InputBinding("screenshot", "Screenshot", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F2)) {
+        InputBindingManager.addBinding(new InputBinding("screenshot", "Screenshot", "General", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F2)) {
             @Override
             public boolean onPressed() {
                 screenshot = true;
@@ -650,7 +637,7 @@ public class LEDCubeManager {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("reloadshaders", "Reload Shaders", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F5)) {
+        InputBindingManager.addBinding(new InputBinding("reloadshaders", "Reload Shaders", "General", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F5)) {
             @Override
             public boolean onPressed() {
                 ShaderProgram.cleanup();
@@ -663,10 +650,23 @@ public class LEDCubeManager {
                 return true;
             }
         });
-        InputBindingManager.addBinding(new InputBinding("wireframe", "Wireframe", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F6)) {
+        InputBindingManager.addBinding(new InputBinding("wireframe", "Wireframe", "General", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F6)) {
             @Override
             public boolean onPressed() {
                 wireframe = !wireframe;
+                return false;
+            }
+
+            @Override
+            public boolean onReleased() {
+                return true;
+            }
+        });
+        InputBindingManager.addBinding(new InputBinding("movecamera", "Toggle Movement", "Camera", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_ESCAPE)) {
+            @Override
+            public boolean onPressed() {
+                Mouse.setGrabbed(!Mouse.isGrabbed());
+                if (Mouse.isGrabbed()) Mouse.setCursorPosition(displayMode.getWidth() / 2, displayMode.getHeight() / 2);
                 return false;
             }
 
@@ -928,7 +928,10 @@ public class LEDCubeManager {
             UnicodeFont debugFont = fontManager.getFont("chemrea", 20, false, false).getUnicodeFont();
             org.newdawn.slick.Color debugColor = org.newdawn.slick.Color.yellow;
             int y = 0;
-            if (renderFPS || debugMode) debugFont.drawString(5, 5 + y++ * 25, "FPS: " + fpsRender, debugColor);
+            if (renderFPS || debugMode) {
+                debugFont.drawString(5, 5 + y++ * 25, "FPS: " + fpsRender, debugColor);
+                debugFont.drawString(5, 5 + y++ * 25, "Animation FPS: " + ledCube.getCommThread().getFPS(), debugColor);
+            }
             debugFont.drawString(5, 5 + y++ * 25, "Serial port: " + (ledCube.getCommThread().isPortOpen() ? "open" : "closed"), debugColor);
             debugFont.drawString(5, 5 + y++ * 25, "TCP clients: " + ledCube.getCommThread().getNumTCPClients(), debugColor);
             debugFont.drawString(5, 5 + y++ * 25, "Current music: " + ledCube.getSpectrumAnalyzer().getCurrentTrack(), debugColor);

@@ -7,12 +7,16 @@ import com.techjar.ledcm.gui.GUIAlignment;
 import com.techjar.ledcm.gui.GUIBackground;
 import com.techjar.ledcm.gui.GUIButton;
 import com.techjar.ledcm.gui.GUICallback;
+import com.techjar.ledcm.gui.GUICheckBox;
+import com.techjar.ledcm.gui.GUIColorPicker;
 import com.techjar.ledcm.gui.GUIComboBox;
 import com.techjar.ledcm.gui.GUIComboButton;
 import com.techjar.ledcm.gui.GUILabel;
 import com.techjar.ledcm.gui.GUIRadioButton;
 import com.techjar.ledcm.gui.GUIScrollBox;
 import com.techjar.ledcm.gui.GUISlider;
+import com.techjar.ledcm.gui.GUISpinner;
+import com.techjar.ledcm.gui.GUITabbed;
 import com.techjar.ledcm.gui.GUITextField;
 import com.techjar.ledcm.gui.GUIWindow;
 import com.techjar.ledcm.hardware.LEDManager;
@@ -21,6 +25,7 @@ import com.techjar.ledcm.hardware.animation.AnimationSequence;
 import com.techjar.ledcm.util.Constants;
 import com.techjar.ledcm.util.Dimension3D;
 import com.techjar.ledcm.util.PrintStreamRelayer;
+import com.techjar.ledcm.util.Vector3;
 import java.io.File;
 import java.io.IOException;
 import javax.swing.JFileChooser;
@@ -36,15 +41,17 @@ import org.newdawn.slick.UnicodeFont;
  */
 public class ScreenMainControl extends Screen {
     public final UnicodeFont font;
+    public final UnicodeFont fontTabbed;
     public final GUISlider progressSlider;
     public final GUIWindow layersWindow;
     public final GUIWindow sequenceWindow;
     public final GUIWindow animOptionsWindow;
     public final GUIWindow settingsWindow;
     public final GUIWindow controlsWindow;
+    public final GUIWindow transformWindow;
     public final GUIScrollBox animOptionsScrollBox;
     public final GUIScrollBox settingsScrollBox;
-    public final GUIScrollBox controlsScrollBox;
+    public final GUITabbed controlsTabbed;
     public final GUIButton animOptionsBtn;
     public final GUIButton settingsBtn;
     public final GUIButton audioInputBtn;
@@ -85,6 +92,26 @@ public class ScreenMainControl extends Screen {
     public final GUIButton sequenceStopBtn;
     public final GUIButton settingsApplyBtn;
     public final GUIButton controlsBtn;
+    public final GUIButton transformBtn;
+    public final GUILabel mirrorLabel;
+    public final GUICheckBox mirrorX;
+    public final GUILabel mirrorXLabel;
+    public final GUICheckBox mirrorY;
+    public final GUILabel mirrorYLabel;
+    public final GUICheckBox mirrorZ;
+    public final GUILabel mirrorZLabel;
+    public final GUILabel rotateLabel;
+    public final GUISpinner rotateXSpinner;
+    public final GUIButton rotateXButton;
+    public final GUILabel rotateXLabel;
+    public final GUISpinner rotateYSpinner;
+    public final GUIButton rotateYButton;
+    public final GUILabel rotateYLabel;
+    public final GUISpinner rotateZSpinner;
+    public final GUIButton rotateZButton;
+    public final GUILabel rotateZLabel;
+    public final GUICheckBox previewTransform;
+    public final GUILabel previewTransformLabel;
     
     public ScreenMainControl() {
         super();
@@ -92,6 +119,7 @@ public class ScreenMainControl extends Screen {
         final Dimension3D ledDim = ledManager.getDimensions();
 
         font = LEDCubeManager.getFontManager().getFont("chemrea", 30, false, false).getUnicodeFont();
+        fontTabbed = LEDCubeManager.getFontManager().getFont("chemrea", 22, false, false).getUnicodeFont();
         playBtn = new GUIButton(font, new Color(255, 255, 255), "Play", new GUIBackground(new Color(255, 0, 0), new Color(50, 50, 50), 2));
         playBtn.setParentAlignment(GUIAlignment.BOTTOM_LEFT);
         playBtn.setDimension(100, 40);
@@ -237,18 +265,23 @@ public class ScreenMainControl extends Screen {
         blueColorSlider.setChangeHandler(new GUICallback() {
             @Override
             public void run() {
-                LEDCubeManager.getPaintColor().setBlue(Math.round(255 * blueColorSlider.getValue()));
+                if (LEDCubeManager.getLEDCube().getLEDManager().isMonochrome()) {
+                    Color color = LEDCubeManager.getLEDCube().getLEDManager().getMonochromeColor();
+                    LEDCubeManager.getPaintColor().setRed(Math.round(color.getRed() * blueColorSlider.getValue()));
+                    LEDCubeManager.getPaintColor().setGreen(Math.round(color.getGreen() * blueColorSlider.getValue()));
+                    LEDCubeManager.getPaintColor().setBlue(Math.round(color.getBlue() * blueColorSlider.getValue()));
+                } else {
+                    LEDCubeManager.getPaintColor().setBlue(Math.round(255 * blueColorSlider.getValue()));
+                }
             }
         });
         container.addComponent(blueColorSlider);
         if (LEDCubeManager.getLEDCube().getLEDManager().isMonochrome()) {
             Color color = LEDCubeManager.getLEDCube().getLEDManager().getMonochromeColor();
-            redColorSlider.setValue(color.getRed() / 255F);
-            redColorSlider.setEnabled(false);
-            greenColorSlider.setValue(color.getGreen() / 255F);
-            greenColorSlider.setEnabled(false);
-            blueColorSlider.setValue(color.getBlue() / 255F);
-            blueColorSlider.setEnabled(false);
+            LEDCubeManager.getPaintColor().setColor(color);
+            redColorSlider.setVisible(false);
+            greenColorSlider.setVisible(false);
+            blueColorSlider.setColor(color);
         }
         xScaleSlider = new GUISlider(new Color(255, 0, 0), new Color(50, 50, 50));
         xScaleSlider.setParentAlignment(GUIAlignment.BOTTOM_RIGHT);
@@ -316,7 +349,7 @@ public class ScreenMainControl extends Screen {
 
         layersWindow = new GUIWindow(new GUIBackground(new Color(10, 10, 10), new Color(255, 0, 0), 2));
         layersWindow.setDimension(150, 167);
-        layersWindow.setPosition(container.getWidth() - layersWindow.getWidth() - 10, container.getHeight() - layersWindow.getHeight() - 320);
+        layersWindow.setPosition(container.getWidth() - layersWindow.getWidth() - 10, container.getHeight() - layersWindow.getHeight() - 360);
         layersWindow.setResizable(false);
         layersWindow.setCloseAction(GUIWindow.HIDE_ON_CLOSE);
         layersWindow.setVisible(false);
@@ -662,17 +695,15 @@ public class ScreenMainControl extends Screen {
         controlsWindow.setMinimumSize(new Dimension(50, 150));
         controlsWindow.setVisible(false);
         container.addComponent(controlsWindow);
-        controlsScrollBox = new GUIScrollBox(new Color(255, 0, 0));
-        controlsScrollBox.setDimension((int)controlsWindow.getContainerBox().getWidth(), (int)controlsWindow.getContainerBox().getHeight());
-        controlsScrollBox.setScrollXMode(GUIScrollBox.ScrollMode.DISABLED);
-        controlsScrollBox.setScrollYMode(GUIScrollBox.ScrollMode.AUTOMATIC);
+        controlsTabbed = new GUITabbed(fontTabbed, new Color(255, 255, 255), new GUIBackground(new Color(50, 50, 50), new Color(255, 0, 0), 2));
+        controlsTabbed.setDimension((int)controlsWindow.getContainerBox().getWidth(), (int)controlsWindow.getContainerBox().getHeight());
         controlsWindow.setDimensionChangeHandler(new GUICallback() {
             @Override
             public void run() {
-                controlsScrollBox.setDimension((int)controlsWindow.getContainerBox().getWidth(), (int)controlsWindow.getContainerBox().getHeight());
+                controlsTabbed.setDimension((int)controlsWindow.getContainerBox().getWidth(), (int)controlsWindow.getContainerBox().getHeight());
             }
         });
-        controlsWindow.addComponent(controlsScrollBox);
+        controlsWindow.addComponent(controlsTabbed);
 
         audioInputBtnBg = new GUIBackground(new Color(255, 0, 0), new Color(50, 50, 50), 2);
         audioInputBtn = new GUIButton(font, new Color(255, 255, 255), "Audio Input", audioInputBtnBg);
@@ -702,6 +733,162 @@ public class ScreenMainControl extends Screen {
         });
         mixerGainSlider.setValue(LEDCubeManager.getConfig().getFloat("sound.inputgain"));
         container.addComponent(mixerGainSlider);
+
+        transformWindow = new GUIWindow(new GUIBackground(new Color(10, 10, 10), new Color(255, 0, 0), 2));
+        transformWindow.setDimension(310, 272);
+        transformWindow.setPosition(container.getWidth() - transformWindow.getWidth() - 10, container.getHeight() - transformWindow.getHeight() - 360);
+        transformWindow.setResizable(false);
+        transformWindow.setCloseAction(GUIWindow.HIDE_ON_CLOSE);
+        transformWindow.setMinimumSize(new Dimension(50, 150));
+        transformWindow.setVisible(false);
+        container.addComponent(transformWindow);
+        transformBtn = new GUIButton(font, new Color(255, 255, 255), "Transform", new GUIBackground(new Color(255, 0, 0), new Color(50, 50, 50), 2));
+        transformBtn.setParentAlignment(GUIAlignment.BOTTOM_RIGHT);
+        transformBtn.setDimension(165, 35);
+        transformBtn.setPosition(-10, -315);
+        transformBtn.setClickHandler(new GUICallback() {
+            @Override
+            public void run() {
+                transformWindow.setVisible(!transformWindow.isVisible());
+                if (transformWindow.isVisible()) transformWindow.setToBePutOnTop(true);
+            }
+        });
+        container.addComponent(transformBtn);
+        mirrorLabel = new GUILabel(font, new Color(255, 255, 255), "Mirror");
+        mirrorLabel.setDimension(20, 105);
+        mirrorLabel.setPosition(10, 10);
+        transformWindow.addComponent(mirrorLabel);
+        mirrorX = new GUICheckBox(new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
+        mirrorX.setDimension(30, 30);
+        mirrorX.setPosition(115, 10);
+        mirrorX.setChangeHandler(new GUICallback() {
+            @Override
+            public void run() {
+                LEDCubeManager.getLEDCube().setReflection(mirrorX.isChecked(), mirrorY.isChecked(), mirrorZ.isChecked());
+            }
+        });
+        transformWindow.addComponent(mirrorX);
+        mirrorXLabel = new GUILabel(font, new Color(255, 255, 255), "X");
+        mirrorXLabel.setDimension(20, 30);
+        mirrorXLabel.setPosition(150, 10);
+        mirrorX.setLabel(mirrorXLabel);
+        transformWindow.addComponent(mirrorXLabel);
+        mirrorY = new GUICheckBox(new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
+        mirrorY.setDimension(30, 30);
+        mirrorY.setPosition(180, 10);
+        mirrorY.setChangeHandler(new GUICallback() {
+            @Override
+            public void run() {
+                LEDCubeManager.getLEDCube().setReflection(mirrorX.isChecked(), mirrorY.isChecked(), mirrorZ.isChecked());
+            }
+        });
+        transformWindow.addComponent(mirrorY);
+        mirrorYLabel = new GUILabel(font, new Color(255, 255, 255), "Y");
+        mirrorYLabel.setDimension(20, 30);
+        mirrorYLabel.setPosition(215, 10);
+        mirrorY.setLabel(mirrorYLabel);
+        transformWindow.addComponent(mirrorYLabel);
+        mirrorZ = new GUICheckBox(new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
+        mirrorZ.setDimension(30, 30);
+        mirrorZ.setPosition(245, 10);
+        mirrorZ.setChangeHandler(new GUICallback() {
+            @Override
+            public void run() {
+                LEDCubeManager.getLEDCube().setReflection(mirrorX.isChecked(), mirrorY.isChecked(), mirrorZ.isChecked());
+            }
+        });
+        transformWindow.addComponent(mirrorZ);
+        mirrorZLabel = new GUILabel(font, new Color(255, 255, 255), "Z");
+        mirrorZLabel.setDimension(20, 30);
+        mirrorZLabel.setPosition(280, 10);
+        mirrorZ.setLabel(mirrorZLabel);
+        transformWindow.addComponent(mirrorZLabel);
+        rotateLabel = new GUILabel(font, new Color(255, 255, 255), "Rotate (Degrees)");
+        rotateLabel.setDimension(font.getWidth(rotateLabel.getText()), 30);
+        rotateLabel.setPosition(10, 50);
+        transformWindow.addComponent(rotateLabel);
+        rotateXLabel = new GUILabel(font, new Color(255, 255, 255), "X");
+        rotateXLabel.setDimension(20, 30);
+        rotateXLabel.setPosition(10, 93);
+        transformWindow.addComponent(rotateXLabel);
+        rotateXSpinner = new GUISpinner(font, new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
+        rotateXSpinner.setDimension(150, 35);
+        rotateXSpinner.setPosition(35, 90);
+        rotateXSpinner.setMinValue(-360);
+        rotateXSpinner.setMaxValue(360);
+        rotateXSpinner.setValue(90);
+        rotateXSpinner.setIncrement(90);
+        transformWindow.addComponent(rotateXSpinner);
+        rotateXButton = new GUIButton(font, new Color(255, 255, 255), "Apply", new GUIBackground(new Color(255, 0, 0), new Color(50, 50, 50), 2));
+        rotateXButton.setDimension(100, 35);
+        rotateXButton.setPosition(195, 90);
+        rotateXButton.setClickHandler(new GUICallback() {
+            @Override
+            public void run() {
+                LEDCubeManager.getLEDCube().rotateTransform((float)Math.toRadians(rotateXSpinner.getValue()), new Vector3(1, 0, 0));
+            }
+        });
+        transformWindow.addComponent(rotateXButton);
+        rotateYLabel = new GUILabel(font, new Color(255, 255, 255), "Y");
+        rotateYLabel.setDimension(20, 30);
+        rotateYLabel.setPosition(10, 133);
+        transformWindow.addComponent(rotateYLabel);
+        rotateYSpinner = new GUISpinner(font, new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
+        rotateYSpinner.setDimension(150, 35);
+        rotateYSpinner.setPosition(35, 130);
+        rotateYSpinner.setMinValue(-360);
+        rotateYSpinner.setMaxValue(360);
+        rotateYSpinner.setValue(90);
+        rotateYSpinner.setIncrement(90);
+        transformWindow.addComponent(rotateYSpinner);
+        rotateYButton = new GUIButton(font, new Color(255, 255, 255), "Apply", new GUIBackground(new Color(255, 0, 0), new Color(50, 50, 50), 2));
+        rotateYButton.setDimension(100, 35);
+        rotateYButton.setPosition(195, 130);
+        rotateYButton.setClickHandler(new GUICallback() {
+            @Override
+            public void run() {
+                LEDCubeManager.getLEDCube().rotateTransform((float)Math.toRadians(rotateYSpinner.getValue()), new Vector3(0, 1, 0));
+            }
+        });
+        transformWindow.addComponent(rotateYButton);
+        rotateZLabel = new GUILabel(font, new Color(255, 255, 255), "Z");
+        rotateZLabel.setDimension(20, 30);
+        rotateZLabel.setPosition(10, 173);
+        transformWindow.addComponent(rotateZLabel);
+        rotateZSpinner = new GUISpinner(font, new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
+        rotateZSpinner.setDimension(150, 35);
+        rotateZSpinner.setPosition(35, 170);
+        rotateZSpinner.setMinValue(-360);
+        rotateZSpinner.setMaxValue(360);
+        rotateZSpinner.setValue(90);
+        rotateZSpinner.setIncrement(90);
+        transformWindow.addComponent(rotateZSpinner);
+        rotateZButton = new GUIButton(font, new Color(255, 255, 255), "Apply", new GUIBackground(new Color(255, 0, 0), new Color(50, 50, 50), 2));
+        rotateZButton.setDimension(100, 35);
+        rotateZButton.setPosition(195, 170);
+        rotateZButton.setClickHandler(new GUICallback() {
+            @Override
+            public void run() {
+                LEDCubeManager.getLEDCube().rotateTransform((float)Math.toRadians(rotateZSpinner.getValue()), new Vector3(0, 0, 1));
+            }
+        });
+        transformWindow.addComponent(rotateZButton);
+        previewTransform = new GUICheckBox(new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
+        previewTransform.setDimension(30, 30);
+        previewTransform.setPosition(10, 210);
+        previewTransform.setChecked(true);
+        previewTransform.setChangeHandler(new GUICallback() {
+            @Override
+            public void run() {
+                LEDCubeManager.getLEDCube().setPreviewTransform(previewTransform.isChecked());
+            }
+        });
+        transformWindow.addComponent(previewTransform);
+        previewTransformLabel = new GUILabel(font, new Color(255, 255, 255), "Preview");
+        previewTransformLabel.setDimension(font.getWidth(previewTransformLabel.getText()), 30);
+        previewTransformLabel.setPosition(45, 210);
+        previewTransform.setLabel(previewTransformLabel);
+        transformWindow.addComponent(previewTransformLabel);
     }
 
     @Override
