@@ -125,7 +125,13 @@ public class LEDCube {
     }
 
     public void update(float delta) {
-        // we don't do anything here... yet...
+        LEDCubeManager.addInfoText("Serial port: " + (commThread.isPortOpen() ? "open" : "closed"), 100);
+        LEDCubeManager.addInfoText("TCP clients: " + commThread.getNumTCPClients(), 110);
+        LEDCubeManager.addInfoText("Current music: " + spectrumAnalyzer.getCurrentTrack(), 120);
+        LEDCubeManager.addInfoText("Music time: " + spectrumAnalyzer.getPositionMillis(), 130);
+        if (commThread.isFrozen()) LEDCubeManager.addInfoText("Animation Frozen", 140);
+        if (ledManager.getResolution() < 255) LEDCubeManager.addInfoText("Color mode: " + (trueColor ? "true" : "full"), 150);
+        LEDCubeManager.addInfoText("Hovered LED: " + (cursorTrace == null ? "none" : (int)cursorTrace.getX() + ", " + (int)cursorTrace.getY() + ", " + (int)cursorTrace.getZ()), 900);
     }
 
     public int render() {
@@ -347,6 +353,18 @@ public class LEDCube {
                 return true;
             }
         });
+        InputBindingManager.addBinding(new InputBinding("resettransform", "Reset Rotation", "Cube", true, new InputInfo(InputInfo.Type.KEYBOARD, Keyboard.KEY_F3)) {
+            @Override
+            public boolean onPressed() {
+                resetTransform();
+                return false;
+            }
+
+            @Override
+            public boolean onReleased() {
+                return true;
+            }
+        });
     }
 
     private void initOctree() {
@@ -467,6 +485,10 @@ public class LEDCube {
         transform.translate(centerPoint.negate(null));
     }
 
+    public void resetTransform() {
+        transform.setIdentity();
+    }
+
     public void setReflection(boolean x, boolean y, boolean z) {
         reflectX = x;
         reflectY = y;
@@ -501,11 +523,8 @@ public class LEDCube {
         addAnimation(new AnimationMatrix());
         //addAnimation(new AnimationFolder());
         addAnimation(new AnimationTwinkle());
-        addAnimation(new AnimationBlink());
         addAnimation(new AnimationStrobe());
         addAnimation(new AnimationSnake());
-        addAnimation(new AnimationSnakeBattle());
-        addAnimation(new AnimationSnakeInfinite());
         addAnimation(new AnimationScrollers());
         addAnimation(new AnimationProgressiveFill());
         addAnimation(new AnimationSine());
@@ -519,8 +538,10 @@ public class LEDCube {
         addAnimation(new AnimationFaucetFill());
         addAnimation(new AnimationFaucetFillRainbow());
         addAnimation(new AnimationSlidingBoxes());
+        addAnimation(new AnimationBalls());
+        addAnimation(new AnimationColorSpectrum());
+        addAnimation(new AnimationSlidingPanels());
         addAnimation(new AnimationWave());
-
         for (Animation anim : animations.values()) {
             anim.postLoadInitOptions();
         }

@@ -2,7 +2,7 @@
 package com.techjar.ledcm.gui.screen;
 
 import com.techjar.ledcm.LEDCubeManager;
-import com.techjar.ledcm.RenderHelper;
+import com.techjar.ledcm.render.RenderHelper;
 import com.techjar.ledcm.gui.GUIAlignment;
 import com.techjar.ledcm.gui.GUIBackground;
 import com.techjar.ledcm.gui.GUIButton;
@@ -40,6 +40,7 @@ import org.newdawn.slick.UnicodeFont;
  * @author Techjar
  */
 public class ScreenMainControl extends Screen {
+    private GUICallback resizeHandler2;
     public final UnicodeFont font;
     public final UnicodeFont fontTabbed;
     public final GUISlider progressSlider;
@@ -112,6 +113,8 @@ public class ScreenMainControl extends Screen {
     public final GUILabel rotateZLabel;
     public final GUICheckBox previewTransform;
     public final GUILabel previewTransformLabel;
+    public final GUILabel fullscreenLabel;
+    public final GUICheckBox fullscreenCheckbox;
     
     public ScreenMainControl() {
         super();
@@ -349,7 +352,6 @@ public class ScreenMainControl extends Screen {
 
         layersWindow = new GUIWindow(new GUIBackground(new Color(10, 10, 10), new Color(255, 0, 0), 2));
         layersWindow.setDimension(150, 167);
-        layersWindow.setPosition(container.getWidth() - layersWindow.getWidth() - 10, container.getHeight() - layersWindow.getHeight() - 360);
         layersWindow.setResizable(false);
         layersWindow.setCloseAction(GUIWindow.HIDE_ON_CLOSE);
         layersWindow.setVisible(false);
@@ -490,7 +492,6 @@ public class ScreenMainControl extends Screen {
         container.addComponent(sequenceLoadBtn);
         sequenceWindow = new GUIWindow(new GUIBackground(new Color(10, 10, 10), new Color(255, 0, 0), 2));
         sequenceWindow.setDimension(350, 150);
-        sequenceWindow.setPosition(container.getWidth() / 2 - sequenceWindow.getWidth() / 2, container.getHeight() / 2 - sequenceWindow.getHeight() / 2);
         sequenceWindow.setResizable(false);
         sequenceWindow.setCloseAction(GUIWindow.HIDE_ON_CLOSE);
         sequenceWindow.setVisible(false);
@@ -535,7 +536,6 @@ public class ScreenMainControl extends Screen {
 
         animOptionsWindow = new GUIWindow(new GUIBackground(new Color(10, 10, 10), new Color(255, 0, 0), 2));
         animOptionsWindow.setDimension(500, 300);
-        animOptionsWindow.setPosition(container.getWidth() / 2 - animOptionsWindow.getWidth() / 2, container.getHeight() / 2 - animOptionsWindow.getHeight() / 2);
         animOptionsWindow.setResizable(false, true);
         animOptionsWindow.setCloseAction(GUIWindow.HIDE_ON_CLOSE);
         animOptionsWindow.setVisible(false);
@@ -583,7 +583,6 @@ public class ScreenMainControl extends Screen {
 
         settingsWindow = new GUIWindow(new GUIBackground(new Color(10, 10, 10), new Color(255, 0, 0), 2));
         settingsWindow.setDimension(450, 450);
-        settingsWindow.setPosition(container.getWidth() / 2 - settingsWindow.getWidth() / 2, container.getHeight() / 2 - settingsWindow.getHeight() / 2);
         settingsWindow.setResizable(false, true);
         settingsWindow.setCloseAction(GUIWindow.HIDE_ON_CLOSE);
         settingsWindow.setMinimumSize(new Dimension(50, 150));
@@ -615,6 +614,7 @@ public class ScreenMainControl extends Screen {
                         LEDCubeManager.getInstance().setDisplayMode(Integer.parseInt(split[0]), Integer.parseInt(split[1]));
                     }
                 }
+                LEDCubeManager.getInstance().setFullscreen(fullscreenCheckbox.isChecked());
                 item = audioInputComboBox.getSelectedItem();
                 if (item != null) {
                     LEDCubeManager.getLEDCube().getSpectrumAnalyzer().setMixer(item.toString());
@@ -668,10 +668,21 @@ public class ScreenMainControl extends Screen {
         }
         resolutionComboBox.setSelectedItem(LEDCubeManager.getWidth() + "x" + LEDCubeManager.getHeight());
         settingsScrollBox.addComponent(resolutionComboBox);
+        fullscreenLabel = new GUILabel(font, new Color(255, 255, 255), "Fullscreen");
+        fullscreenLabel.setParentAlignment(GUIAlignment.TOP_CENTER);
+        fullscreenLabel.setDimension(font.getWidth(fullscreenLabel.getText()), 30);
+        fullscreenLabel.setPosition(-165 + (fullscreenLabel.getWidth() / 2), 55);
+        settingsScrollBox.addComponent(fullscreenLabel);
+        fullscreenCheckbox = new GUICheckBox(new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
+        fullscreenCheckbox.setParentAlignment(GUIAlignment.TOP_CENTER);
+        fullscreenCheckbox.setDimension(30, 30);
+        fullscreenCheckbox.setPosition(-185, 55);
+        fullscreenCheckbox.setChecked(LEDCubeManager.getInstance().isFullscreen());
+        settingsScrollBox.addComponent(fullscreenCheckbox);
         audioInputComboBox = new GUIComboBox(font, new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
         audioInputComboBox.setParentAlignment(GUIAlignment.TOP_CENTER);
         audioInputComboBox.setDimension(400, 35);
-        audioInputComboBox.setPosition(0, 55);
+        audioInputComboBox.setPosition(0, 95);
         audioInputComboBox.setVisibleItems(5);
         audioInputComboBox.addAllItems(LEDCubeManager.getLEDCube().getSpectrumAnalyzer().getMixers().keySet());
         audioInputComboBox.setSelectedItem(LEDCubeManager.getLEDCube().getSpectrumAnalyzer().getCurrentMixerName());
@@ -679,7 +690,7 @@ public class ScreenMainControl extends Screen {
         antiAliasingComboBtn = new GUIComboButton(font, new Color(255, 255, 255), new GUIBackground(new Color(255, 0, 0), new Color(50, 50, 50), 2));
         antiAliasingComboBtn.setParentAlignment(GUIAlignment.TOP_CENTER);
         antiAliasingComboBtn.setDimension(400, 35);
-        antiAliasingComboBtn.setPosition(0, 100);
+        antiAliasingComboBtn.setPosition(0, 140);
         antiAliasingComboBtn.addItem("Off");
         for (int i = 2; i <= LEDCubeManager.getInstance().antiAliasingMaxSamples; i *= 2) {
             antiAliasingComboBtn.addItem(i + "x");
@@ -689,7 +700,6 @@ public class ScreenMainControl extends Screen {
 
         controlsWindow = new GUIWindow(new GUIBackground(new Color(10, 10, 10), new Color(255, 0, 0), 2));
         controlsWindow.setDimension(500, 450);
-        controlsWindow.setPosition(container.getWidth() / 2 - controlsWindow.getWidth() / 2, container.getHeight() / 2 - controlsWindow.getHeight() / 2);
         controlsWindow.setResizable(false, true);
         controlsWindow.setCloseAction(GUIWindow.HIDE_ON_CLOSE);
         controlsWindow.setMinimumSize(new Dimension(50, 150));
@@ -736,7 +746,6 @@ public class ScreenMainControl extends Screen {
 
         transformWindow = new GUIWindow(new GUIBackground(new Color(10, 10, 10), new Color(255, 0, 0), 2));
         transformWindow.setDimension(310, 272);
-        transformWindow.setPosition(container.getWidth() - transformWindow.getWidth() - 10, container.getHeight() - transformWindow.getHeight() - 360);
         transformWindow.setResizable(false);
         transformWindow.setCloseAction(GUIWindow.HIDE_ON_CLOSE);
         transformWindow.setMinimumSize(new Dimension(50, 150));
@@ -889,6 +898,8 @@ public class ScreenMainControl extends Screen {
         previewTransformLabel.setPosition(45, 210);
         previewTransform.setLabel(previewTransformLabel);
         transformWindow.addComponent(previewTransformLabel);
+
+        positionWindows();
     }
 
     @Override
@@ -903,11 +914,25 @@ public class ScreenMainControl extends Screen {
         super.render();
     }
 
+    @Override
+    protected void onResized() {
+        positionWindows();
+    }
+
     public final void populateAnimationList() {
         animComboBox.clearItems();
         for (String name : LEDCubeManager.getLEDCube().getAnimationNames()) {
             animComboBox.addItem(name);
         }
         animComboBox.setSelectedItem(1);
+    }
+
+    private final void positionWindows() {
+        layersWindow.setPosition(container.getWidth() - layersWindow.getWidth() - 10, container.getHeight() - layersWindow.getHeight() - 360);
+        sequenceWindow.setPosition(container.getWidth() / 2 - sequenceWindow.getWidth() / 2, container.getHeight() / 2 - sequenceWindow.getHeight() / 2);
+        animOptionsWindow.setPosition(container.getWidth() / 2 - animOptionsWindow.getWidth() / 2, container.getHeight() / 2 - animOptionsWindow.getHeight() / 2);
+        settingsWindow.setPosition(container.getWidth() / 2 - settingsWindow.getWidth() / 2, container.getHeight() / 2 - settingsWindow.getHeight() / 2);
+        controlsWindow.setPosition(container.getWidth() / 2 - controlsWindow.getWidth() / 2, container.getHeight() / 2 - controlsWindow.getHeight() / 2);
+        transformWindow.setPosition(container.getWidth() - transformWindow.getWidth() - 10, container.getHeight() - transformWindow.getHeight() - 360);
     }
 }

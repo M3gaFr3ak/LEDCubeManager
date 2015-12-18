@@ -23,6 +23,12 @@ public class AnimationRain extends Animation {
     private Color topColor = new Color(0, 0, 255);
     private Color bottomColor = new Color(255, 0, 255);
     private Color lightningColor = new Color(225, 255, 255);
+    private int dropFreq = 20;
+    private int lightningFreq = 2500;
+    private boolean lightningEnable = true;
+    private boolean floorCollect = true;
+    private int colorMode = 0;
+    private int speed = 3;
 
     public AnimationRain() {
         super();
@@ -36,7 +42,7 @@ public class AnimationRain extends Animation {
 
     @Override
     public void refresh() {
-        if (ticks % 3 == 0) {
+        if (ticks % speed == 0) {
             for (int x = 0; x < dimension.x; x++) {
                 for (int z = 0; z < dimension.z; z++) {
                     int index = x + (z * dimension.x);
@@ -49,7 +55,7 @@ public class AnimationRain extends Animation {
                                 else ledManager.setLEDColor(x, y, z, drops[index].get(y) ? color : new Color());
                             }
                         }
-                    } else if (random.nextInt(2500) == 0) {
+                    } else if (lightningEnable && random.nextInt(lightningFreq) == 0) {
                         lightning[index] = random.nextInt(30) + 1;
                     }
                     boolean lightningCheck = checkLightning(lightning[index]);
@@ -61,17 +67,20 @@ public class AnimationRain extends Animation {
                     BitSetUtil.shiftRight(drops[index], 1);
                     for (int y = dimension.y - 1; y >= 0; y--) {
                         int stateIndex = index + y * dimension.x * dimension.z;
-                        Color color = MathHelper.lerp(bottomColor, topColor, y / (dimension.y - 1F));
+                        Color color = new Color();
+                        if (colorMode == 0) color = MathHelper.lerp(bottomColor, topColor, y / (dimension.y - 1F));
+                        else if (colorMode == 1) color.fromHSB((y / (dimension.y - 1F)) * (300F / 360F), 1, 1);
+                        else if (colorMode == 2) color.fromHSB((1 - (y / (dimension.y - 1F))) * (300F / 360F), 1, 1);
                         if (y == dimension.y - 1) {
-                            if (random.nextInt(20) == 0) drops[index].set(dimension.y - 1);
+                            if (random.nextInt(dropFreq) == 0) drops[index].set(dimension.y - 1);
                         } else if (y == 0) {
                             floor[index] = Math.max(floor[index] - (random.nextFloat() * 0.1F), 0);
-                            if (drops[index].get(y)) {
+                            if (floorCollect && drops[index].get(y)) {
                                 drops[index].clear(0);
                                 floor[index] = 1;
                             }
                         }
-                        if (y == 0) {
+                        if ((floorCollect && y == 0) || (!floorCollect && y == 0 && floor[index] != floorStates[stateIndex])) {
                             if (floor[index] != floorStates[stateIndex]) {
                                 floorStates[stateIndex] = floor[index];
                                 if (!lightningCheck) ledManager.setLEDColor(x, y, z, floorStates[stateIndex] > 0 ? Util.multiplyColor(color, floorStates[stateIndex]) : new Color());
@@ -98,6 +107,54 @@ public class AnimationRain extends Animation {
         lightning = new int[dimension.x * dimension.z];
         states = new boolean[dimension.x * dimension.y * dimension.z];
         floorStates = new float[dimension.x * dimension.z];
+    }
+
+    @Override
+    public AnimationOption[] getOptions() {
+        return new AnimationOption[]{
+            new AnimationOption("topcolor", "Top", AnimationOption.OptionType.COLORPICKER, new Object[]{topColor}),
+            new AnimationOption("bottomcolor", "Bottom", AnimationOption.OptionType.COLORPICKER, new Object[]{bottomColor}),
+            new AnimationOption("lightningcolor", "Lightning", AnimationOption.OptionType.COLORPICKER, new Object[]{lightningColor}),
+            new AnimationOption("colormode", "Color", AnimationOption.OptionType.COMBOBOX, new Object[]{colorMode, 0, "Gradient", 1, "Rainbow Up", 2, "Rainbow Down"}),
+            new AnimationOption("dropfreq", "Drop Freq", AnimationOption.OptionType.SLIDER, new Object[]{(98 - (dropFreq - 2)) / 98F, 1F / 98F, false}),
+            new AnimationOption("lightningfreq", "L. Freq", AnimationOption.OptionType.SLIDER, new Object[]{(29950 - (lightningFreq - 50)) / 29950F}),
+            new AnimationOption("speed", "Speed", AnimationOption.OptionType.SLIDER, new Object[]{(19 - (speed - 1)) / 19F, 1F / 19F}),
+            new AnimationOption("lightningenable", "L. Enable", AnimationOption.OptionType.CHECKBOX, new Object[]{lightningEnable}),
+            new AnimationOption("floorcollect", "Floor Coll.", AnimationOption.OptionType.CHECKBOX, new Object[]{floorCollect}),
+        };
+    }
+
+    @Override
+    public synchronized void optionChanged(String name, String value) {
+        switch (name) {
+            case "topcolor":
+                topColor = Util.stringToColor(value);
+                break;
+            case "bottomcolor":
+                bottomColor = Util.stringToColor(value);
+                break;
+            case "lightningcolor":
+                lightningColor = Util.stringToColor(value);
+                break;
+            case "dropfreq":
+                dropFreq = 2 + (98 - Math.round(98 * Float.parseFloat(value)));
+                break;
+            case "lightningfreq":
+                lightningFreq = 50 + (29950 - Math.round(29950 * Float.parseFloat(value)));
+                break;
+            case "lightningenable":
+                lightningEnable = Boolean.parseBoolean(value);
+                break;
+            case "floorcollect":
+                floorCollect = Boolean.parseBoolean(value);
+                break;
+            case "colormode":
+                colorMode = Integer.parseInt(value);
+                break;
+            case "speed":
+                speed = 1 + (19 - Math.round(19 * Float.parseFloat(value)));
+                break;
+        }
     }
 
     private boolean checkBit(long number, int bit) {

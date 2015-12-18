@@ -1,4 +1,8 @@
 package com.techjar.ledcm;
+import com.techjar.ledcm.render.LightingHandler;
+import com.techjar.ledcm.render.Camera;
+import com.techjar.ledcm.render.Frustum;
+import com.techjar.ledcm.render.InstancedRenderer;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL12.*;
 import static org.lwjgl.opengl.GL13.*;
@@ -15,6 +19,7 @@ import static org.lwjgl.util.glu.GLU.*;
 import com.hackoeur.jglm.Mat3;
 import com.hackoeur.jglm.Mat4;
 import com.hackoeur.jglm.Matrices;
+import com.hackoeur.jglm.Vec3;
 import com.obj.WavefrontObject;
 import com.techjar.ledcm.gui.GUICallback;
 import com.techjar.ledcm.gui.screen.Screen;
@@ -29,6 +34,8 @@ import com.techjar.ledcm.hardware.TestLEDManager;
 import com.techjar.ledcm.hardware.animation.*;
 import com.techjar.ledcm.hardware.tcp.TCPServer;
 import com.techjar.ledcm.hardware.tcp.packet.Packet;
+import com.techjar.ledcm.render.pipeline.RenderPipeline;
+import com.techjar.ledcm.render.pipeline.RenderPipelineStandard;
 import com.techjar.ledcm.util.Angle;
 import com.techjar.ledcm.util.ArgumentParser;
 import com.techjar.ledcm.util.Axis;
@@ -45,6 +52,8 @@ import com.techjar.ledcm.util.ModelMesh;
 import com.techjar.ledcm.util.OperatingSystem;
 import com.techjar.ledcm.util.Quaternion;
 import com.techjar.ledcm.util.ShaderProgram;
+import com.techjar.ledcm.util.Timer;
+import com.techjar.ledcm.util.Tuple;
 import com.techjar.ledcm.util.Util;
 import com.techjar.ledcm.util.Vector2;
 import com.techjar.ledcm.util.Vector3;
@@ -109,6 +118,7 @@ import org.lwjgl.LWJGLException;
 import org.lwjgl.Sys;
 import org.lwjgl.input.Controller;
 import org.lwjgl.input.Controllers;
+import org.lwjgl.input.Cursor;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
@@ -132,6 +142,7 @@ public class LEDCubeManager {
     @Getter private static DisplayMode displayMode /*= new DisplayMode(1024, 768)*/;
     private DisplayMode newDisplayMode;
     private DisplayMode configDisplayMode;
+    private ByteBuffer[] icons;
     private boolean fullscreen;
     private boolean newFullscreen;
     @Getter private static ConfigManager config;
@@ -152,12 +163,16 @@ public class LEDCubeManager {
     @Getter private static FrameServer frameServer;
     @Getter private static SystemTray systemTray;
     @Getter @Setter private static boolean convertingAudio;
+    private static Cursor currentCursor;
+    private static Cursor lastCursor;
     private static LEDCube ledCube;
     private List<Screen> screenList = new ArrayList<>();
     private List<ScreenHolder> screensToAdd = new ArrayList<>();
     private List<GUICallback> resizeHandlers = new ArrayList<>();
     private Map<String, Integer> validControllers = new HashMap<>();
+    private List<Tuple<RenderPipeline, Integer>> pipelines = new ArrayList<>();
     private Queue<Packet> packetProcessQueue = new ConcurrentLinkedQueue<>();
+    private static List<Tuple<String, Integer>> debugText = new ArrayList<>();
     private FloatBuffer floatBuffer = BufferUtils.createFloatBuffer(4);
     private FloatBuffer matrixBuffer = BufferUtils.createFloatBuffer(16);
     private int fpsCounter;
@@ -176,25 +191,26 @@ public class LEDCubeManager {
     public final int antiAliasingMaxSamples;
     @Getter private boolean antiAliasing = true;
     @Getter private int antiAliasingSamples = 4;
-    private float fieldOfView;
-    private float viewDistance;
+    @Getter @Setter private float fieldOfView;
+    @Getter @Setter private float viewDistance;
     private int multisampleFBO;
     private int multisampleTexture;
     private int multisampleDepthTexture;
     private int shadowMapSize = 1024;
     private int depthFBO;
     private int depthTexture;
+    private final Timer frameServeTimer = new Timer();
+    private final Timer rateCapTimer = new Timer();
 
     // Screens
     @Getter private ScreenMainControl screenMainControl;
 
     // Really import OpenGL matrix stuff
     private Mat4 projectionMatrix;
-    private Matrix4f viewMatrix;
-    public Matrix4f modelMatrix;
+    private Matrix4f viewMatrix = new Matrix4f();
+    public Matrix4f modelMatrix = new Matrix4f();
 
     @Getter private LightingHandler lightingHandler;
-    private ShaderProgram spMain;
     private ShaderProgram spDepthDraw; // TODO
 
     public LEDCubeManager(String[] args) throws LWJGLException {
@@ -263,9 +279,14 @@ public class LEDCubeManager {
         makeFrame();
         setupSystemTray();
         
+        loadIcons();
+        Display.setIcon(icons);
         Display.create();
         Keyboard.create();
         Mouse.create();
+        CursorType.loadCursors();
+        setCursorType(CursorType.DEFAULT);
+        Display.setTitle(Constants.APP_TITLE);
 
         Controllers.create();
         String defaultController = "";
@@ -281,6 +302,8 @@ public class LEDCubeManager {
         if (validControllers.size() < 1) config.setProperty("controls.controller", "");
         else if (!validControllers.containsKey(config.getString("controls.controller"))) config.setProperty("controls.controller", defaultController);
         if (config.hasChanged()) config.save();
+
+        addRenderPipeline(new RenderPipelineStandard(), 0);
 
         textureManager = new TextureManager();
         modelManager = new ModelManager(textureManager);
@@ -369,21 +392,45 @@ public class LEDCubeManager {
         });
 
         frame.add(canvas, BorderLayout.CENTER);
-        resizeFrame(false);
+        resizeFrame(fullscreen);
     }
 
     private void resizeFrame(boolean fullscreen) throws LWJGLException {
         Display.setParent(null);
         frame.dispose();
-        frame.setUndecorated(fullscreen);
-        if (fullscreen) GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().setFullScreenWindow(frame);
-        else GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().setFullScreenWindow(null);
-        canvas.setPreferredSize(new java.awt.Dimension(displayMode.getWidth(), displayMode.getHeight()));
-        frame.pack();
-        java.awt.Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
-        frame.setLocation((dim.width - frame.getSize().width) / 2, (dim.height - frame.getSize().height) / 2);
-        frame.setVisible(true);
-        Display.setParent(canvas);
+        if (fullscreen) {
+            Display.setDisplayMode(displayMode);
+            Display.setFullscreen(true);
+        } else {
+            Display.setFullscreen(false);
+            if (fullscreen) GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().setFullScreenWindow(frame);
+            else GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().setFullScreenWindow(null);
+            canvas.setPreferredSize(new java.awt.Dimension(displayMode.getWidth(), displayMode.getHeight()));
+            frame.pack();
+            java.awt.Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
+            frame.setLocation((dim.width - frame.getSize().width) / 2, (dim.height - frame.getSize().height) / 2);
+            frame.setVisible(true);
+            Display.setParent(canvas);
+            Display.setDisplayMode(displayMode);
+        }
+    }
+
+    private void loadIcons() throws IOException {
+        icons = new ByteBuffer[4];
+        for (int i = 0; i < 4; i++) {
+            BufferedImage image = ImageIO.read(new File("resources/textures/icon" + (int)Math.pow(2, 4 + i) + ".png"));
+            icons[i] = ByteBuffer.allocate(image.getWidth() * image.getHeight() * 4);
+            for (int y = 0; y < image.getHeight(); y++) {
+                for (int x = 0; x < image.getWidth(); x++) {
+                    int color = image.getRGB(x, y);
+                    icons[i].put((byte)((color >> 16) & 255));
+                    icons[i].put((byte)((color >> 8) & 255));
+                    icons[i].put((byte)(color & 255));
+                    icons[i].put((byte)((color >>> 24) & 255));
+                }
+            }
+            icons[i].rewind();
+        }
     }
 
     public void shutdown() {
@@ -422,7 +469,12 @@ public class LEDCubeManager {
     public void run() throws LWJGLException {
         while (!Display.isCloseRequested() && !closeRequested) {
             try {
-                runGameLoop();
+                if (rateCapTimer.getMilliseconds() >= 1000D / 300D) {
+                    rateCapTimer.restart();
+                    runGameLoop();
+                } else if (1000D / 300D - rateCapTimer.getMilliseconds() > 1) {
+                    Thread.sleep(1);
+                }
             } catch (Exception ex) {
                 ex.printStackTrace();
                 closeRequested = true;
@@ -432,18 +484,19 @@ public class LEDCubeManager {
     }
 
     private void runGameLoop() throws LWJGLException, InterruptedException {
-        if (fullscreen && !frame.isFocused()) setFullscreen(false);
+        //if (fullscreen && !frame.isFocused()) setFullscreen(false);
         if (newDisplayMode != null || newFullscreen != fullscreen) {
+            fullscreen = newFullscreen;
             if (newDisplayMode != null) {
                 displayMode = newDisplayMode;
                 configDisplayMode = newDisplayMode;
                 config.setProperty("display.width", configDisplayMode.getWidth());
                 config.setProperty("display.height", configDisplayMode.getHeight());
+                config.setProperty("display.fullscreen", fullscreen);
                 config.setProperty("display.antialiasing", antiAliasing);
                 config.setProperty("display.antialiasingsamples", antiAliasingSamples);
                 config.save();
             }
-            fullscreen = newFullscreen;
             newDisplayMode = null;
             useDisplayMode();
         }
@@ -462,7 +515,7 @@ public class LEDCubeManager {
         this.processMouse();
         this.processController();
         this.update();
-        if ((frame.isVisible() && frame.getState() != Frame.ICONIFIED) || frameServer.numClients > 0) this.render();
+        if (Display.isActive() || (frame.isVisible() && frame.getState() != Frame.ICONIFIED) || frameServer.numClients > 0) this.render();
         else Thread.sleep(20);
         Display.update();
     }
@@ -540,7 +593,7 @@ public class LEDCubeManager {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getButton() == MouseEvent.BUTTON1 && e.getClickCount() >= 2) {
-                    frame.setVisible(true);
+                    if (!fullscreen) frame.setVisible(true);
                     e.consume();
                 }
             }
@@ -583,11 +636,11 @@ public class LEDCubeManager {
         config.load();
         config.defaultProperty("display.width", displayMode.getWidth());
         config.defaultProperty("display.height", displayMode.getHeight());
+        config.defaultProperty("display.fullscreen", false);
         config.defaultProperty("display.fieldofview", 45F);
         config.defaultProperty("display.viewdistance", 1000F);
         config.defaultProperty("display.antialiasing", true);
         config.defaultProperty("display.antialiasingsamples", 4);
-        //config.defaultProperty("display.fullscreen", false);
         config.defaultProperty("sound.effectvolume", 1.0F);
         config.defaultProperty("sound.musicvolume", 1.0F);
         config.defaultProperty("sound.inputdevice", "");
@@ -602,7 +655,8 @@ public class LEDCubeManager {
         antiAliasingSamples = config.getInteger("display.antialiasingsamples");
         fieldOfView = config.getFloat("display.fieldofview");
         viewDistance = config.getFloat("display.viewdistance");
-        //fullscreen = config.getBoolean("display.fullscreen");
+        fullscreen = config.getBoolean("display.fullscreen");
+        newFullscreen = fullscreen;
 
         if (!antiAliasingSupported) {
             antiAliasing = false;
@@ -714,7 +768,9 @@ public class LEDCubeManager {
     }
     
     private void initShaders() {
-        spMain = new ShaderProgram().loadShader("main").link();
+        for (Tuple<RenderPipeline, Integer> tuple : pipelines) {
+            tuple.getA().loadShaders();
+        }
     }
 
     public void resizeGL(int width, int height) {
@@ -723,6 +779,9 @@ public class LEDCubeManager {
     }
 
     private void preProcess() {
+        lastCursor = currentCursor;
+        currentCursor = null;
+        debugText.clear();
         ledCube.preProcess();
     }
 
@@ -817,6 +876,26 @@ public class LEDCubeManager {
         }
         screensToAdd.clear();
 
+        try {
+            if (currentCursor != null) Mouse.setNativeCursor(currentCursor);
+            else if (lastCursor != null) Mouse.setNativeCursor(CursorType.DEFAULT.getCursor());
+        } catch (LWJGLException ex) {
+            ex.printStackTrace();
+        }
+
+        if (debugMode) {
+            Runtime runtime = Runtime.getRuntime();
+            if (convertingAudio) addInfoText("Converting audio...", 1000);
+            addInfoText("Memory: " + Util.bytesToMBString(runtime.totalMemory() - runtime.freeMemory()) + " / " + Util.bytesToMBString(runtime.maxMemory()), 1010);
+            Vector3 vector = camera.getAngle().forward();
+            addInfoText("Camera vector: " + vector.getX() + ", " + vector.getY() + ", " + vector.getZ(), 1020);
+            vector = camera.getPosition();
+            addInfoText("Camera position: " + vector.getX() + ", " + vector.getY() + ", " + vector.getZ(), 1030);
+            //debugFont.drawString(5, 5 + y++ * 25, "Cursor position: " + Util.getMouseX() + ", " + Util.getMouseY(), debugColor);
+            //debugFont.drawString(5, 5 + y++ * 25, "Cursor offset: " + (Util.getMouseX() - getWidth() / 2) + ", " + (Util.getMouseY() - getHeight() / 2 + 1), debugColor);
+            //debugFont.drawString(5, 5 + y++ * 25, "Entities: " + (world != null ? world.getEntityCount() : 0), debugColor);
+        }
+
         if (regrab) {
             Mouse.setGrabbed(true);
             regrab = false;
@@ -837,7 +916,6 @@ public class LEDCubeManager {
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
         // Setup projection matrix
-        projectionMatrix = Matrices.perspective(fieldOfView, (float)displayMode.getWidth() / (float)displayMode.getHeight(), 0.1F, viewDistance);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         glEnable(GL_LIGHTING);
         glEnable(GL_DEPTH_TEST);
@@ -868,7 +946,9 @@ public class LEDCubeManager {
             glBindFramebuffer(GL_READ_FRAMEBUFFER, multisampleFBO);
             glBlitFramebuffer(0, 0, displayMode.getWidth(), displayMode.getHeight(), 0, 0, displayMode.getWidth(), displayMode.getHeight(), GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST);
         }
-        if (screenshot || frameServer.numClients > 0) {
+        boolean frameServe = frameServer.numClients > 0 && frameServeTimer.getMilliseconds() >= 1000D / 60D;
+        if (screenshot || frameServe) {
+            frameServeTimer.restart();
             ByteBuffer buffer = BufferUtils.createByteBuffer(displayMode.getWidth() * displayMode.getHeight() * 3);
             glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
             glReadPixels(0, 0, displayMode.getWidth(), displayMode.getHeight(), GL_RGB, GL_UNSIGNED_BYTE, buffer);
@@ -893,7 +973,7 @@ public class LEDCubeManager {
                 ImageIO.write(image, "png", file);
             }
             
-            if (frameServer.numClients > 0) {
+            if (frameServe) {
                 frameServer.queueFrame(image);
             }
         }
@@ -902,17 +982,15 @@ public class LEDCubeManager {
     public void render3D() {
         glPushMatrix();
         
-        spMain.use();
-        setupView(camera.getPosition(), camera.getAngle());
-        sendMatrixToProgram();
-        lightingHandler.sendToShader();
-        
         faceCount = ledCube.render();
+        addInfoText("Rendered faces: " + faceCount, 1040);
 
-        InstancedRenderer.prepareItems();
-        InstancedRenderer.renderAll();
+        for (Tuple<RenderPipeline, Integer> tuple : pipelines) {
+            for (int i = 0; i < tuple.getA().get3DPasses(); i++) {
+                tuple.getA().render3D(i);
+            }
+        }
         InstancedRenderer.resetItems();
-        ShaderProgram.useNone();
         
         glPopMatrix();
     }
@@ -920,39 +998,24 @@ public class LEDCubeManager {
     public void render2D() {
         glPushMatrix();
 
+        for (Tuple<RenderPipeline, Integer> tuple : pipelines) {
+            for (int i = 0; i < tuple.getA().get2DPasses(); i++) {
+                tuple.getA().render2D(i);
+            }
+        }
+
         for (Screen screen : screenList)
             if (screen.isVisible()) screen.render();
 
-        long renderTime = System.nanoTime() - renderStart;
-        if (/*renderFPS || renderDebug ||*/ true) {
-            UnicodeFont debugFont = fontManager.getFont("chemrea", 20, false, false).getUnicodeFont();
-            org.newdawn.slick.Color debugColor = org.newdawn.slick.Color.yellow;
-            int y = 0;
-            if (renderFPS || debugMode) {
-                debugFont.drawString(5, 5 + y++ * 25, "FPS: " + fpsRender, debugColor);
-                debugFont.drawString(5, 5 + y++ * 25, "Animation FPS: " + ledCube.getCommThread().getFPS(), debugColor);
-            }
-            debugFont.drawString(5, 5 + y++ * 25, "Serial port: " + (ledCube.getCommThread().isPortOpen() ? "open" : "closed"), debugColor);
-            debugFont.drawString(5, 5 + y++ * 25, "TCP clients: " + ledCube.getCommThread().getNumTCPClients(), debugColor);
-            debugFont.drawString(5, 5 + y++ * 25, "Current music: " + ledCube.getSpectrumAnalyzer().getCurrentTrack(), debugColor);
-            debugFont.drawString(5, 5 + y++ * 25, "Music time: " + ledCube.getSpectrumAnalyzer().getPositionMillis(), debugColor);
-            if (ledCube.getCommThread().isFrozen()) debugFont.drawString(5, 5 + y++ * 25, "Animation Frozen", debugColor);
-            if (ledCube.getLEDManager().getResolution() < 255) debugFont.drawString(5, 5 + y++ * 25, "Color mode: " + (ledCube.isTrueColor() ? "true" : "full"), debugColor);
-            if (convertingAudio) debugFont.drawString(5, 5 + y++ * 25, "Converting audio...", debugColor);
-            if (debugMode) {
-                Runtime runtime = Runtime.getRuntime();
-                debugFont.drawString(5, 5 + y++ * 25, "Memory: " + Util.bytesToMBString(runtime.totalMemory() - runtime.freeMemory()) + " / " + Util.bytesToMBString(runtime.maxMemory()), debugColor);
-                //debugFont.drawString(5, 5 + y++ * 25, "Update time: " + (updateTime / 1000000D), debugColor);
-                //debugFont.drawString(5, 5 + y++ * 25, "Render time: " + (renderTime / 1000000D), debugColor);
-                Vector3 vector = camera.getAngle().forward();
-                debugFont.drawString(5, 5 + y++ * 25, "Camera vector: " + vector.getX() + ", " + vector.getY() + ", " + vector.getZ(), debugColor);
-                vector = camera.getPosition();
-                debugFont.drawString(5, 5 + y++ * 25, "Camera position: " + vector.getX() + ", " + vector.getY() + ", " + vector.getZ(), debugColor);
-                //debugFont.drawString(5, 5 + y++ * 25, "Cursor position: " + Util.getMouseX() + ", " + Util.getMouseY(), debugColor);
-                //debugFont.drawString(5, 5 + y++ * 25, "Cursor offset: " + (Util.getMouseX() - getWidth() / 2) + ", " + (Util.getMouseY() - getHeight() / 2 + 1), debugColor);
-                debugFont.drawString(5, 5 + y++ * 25, "Rendered faces: " + faceCount, debugColor);
-                //debugFont.drawString(5, 5 + y++ * 25, "Entities: " + (world != null ? world.getEntityCount() : 0), debugColor);
-            }
+        UnicodeFont debugFont = fontManager.getFont("chemrea", 20, false, false).getUnicodeFont();
+        org.newdawn.slick.Color infoColor = org.newdawn.slick.Color.yellow;
+        int y = 0;
+        if (renderFPS || debugMode) {
+            debugFont.drawString(5, 5 + y++ * 25, "FPS: " + fpsRender, infoColor);
+            debugFont.drawString(5, 5 + y++ * 25, "Animation FPS: " + ledCube.getCommThread().getFPS(), infoColor);
+        }
+        for (Tuple<String, Integer> tuple : debugText) {
+            debugFont.drawString(5, (y++ * 25) + 5, tuple.getA(), infoColor);
         }
 
         glPopMatrix();
@@ -968,17 +1031,19 @@ public class LEDCubeManager {
         }
     }
 
-    private void setupView(Vector3 position, Quaternion rotation) {
-        viewMatrix = new Matrix4f();
-        modelMatrix = new Matrix4f();
-        Matrix4f.mul(viewMatrix, rotation.getMatrix(), viewMatrix);
+    public void setupView(Mat4 projection, Vector3 position, Quaternion rotation) {
+        projectionMatrix = projection;
+        viewMatrix.setIdentity();
+        modelMatrix.setIdentity();
+        Matrix4f.mul(viewMatrix, (Matrix4f)rotation.getMatrix().negate(), viewMatrix);
         viewMatrix.translate(Util.convertVector(position.negate()));
         frustum.update(Util.matrixToArray(projectionMatrix), Util.matrixToArray(viewMatrix));
     }
 
-    private void setupView(Vector3 position, Angle angle) {
-        viewMatrix = new Matrix4f();
-        modelMatrix = new Matrix4f();
+    public void setupView(Mat4 projection, Vector3 position, Angle angle) {
+        projectionMatrix = projection;
+        viewMatrix.setIdentity();
+        modelMatrix.setIdentity();
         viewMatrix.rotate((float)Math.toRadians(angle.getRoll()), new Vector3f(0, 0, -1));
         viewMatrix.rotate((float)Math.toRadians(angle.getPitch()), new Vector3f(-1, 0, 0));
         viewMatrix.rotate((float)Math.toRadians(angle.getYaw()), new Vector3f(0, -1, 0));
@@ -986,7 +1051,7 @@ public class LEDCubeManager {
         frustum.update(Util.matrixToArray(projectionMatrix), Util.matrixToArray(viewMatrix));
     }
 
-    private void sendMatrixToProgram() {
+    public void sendMatrixToProgram() {
         ShaderProgram program = ShaderProgram.getCurrent();
         if (program == null) return;
         int projectionMatrixLoc = program.getUniformLocation("projection_matrix");
@@ -1026,6 +1091,14 @@ public class LEDCubeManager {
         ledCube.setPaintColor(color);
     }
 
+    /**
+     * Cursor will reset to default every frame, so you must set it every frame to keep it persistent.
+     * This is to avoid the cursor being left in odd states when it shouldn't be.
+     */
+    public static void setCursorType(CursorType ct) {
+        currentCursor = ct == null ? null : ct.getCursor();
+    }
+
     public Controller getController(String name) {
         Integer index = validControllers.get(name);
         return index != null ? Controllers.getController(index) : null;
@@ -1044,12 +1117,12 @@ public class LEDCubeManager {
         try {
             regrab = Mouse.isGrabbed();
             Mouse.setGrabbed(false);
-            DisplayMode desktopMode = Display.getDesktopDisplayMode();
+            /*DisplayMode desktopMode = Display.getDesktopDisplayMode();
             if (fullscreen) {
-                if (!desktopMode.equals(displayMode)) displayMode = desktopMode;
-            } else displayMode = configDisplayMode;
+                displayMode = desktopMode;
+            } else displayMode = configDisplayMode;*/
+            displayMode = configDisplayMode;
             resizeFrame(fullscreen);
-            Display.setDisplayMode(displayMode);
             resizeGL(displayMode.getWidth(), displayMode.getHeight());
             setupAntiAliasing();
             for (GUICallback callback : resizeHandlers) {
@@ -1144,6 +1217,43 @@ public class LEDCubeManager {
         for (Screen screen : screenList)
             screen.remove();
         screenList.clear();
+    }
+
+    /**
+     * Lower priority number is rendered earlier.
+     */
+    public void addRenderPipeline(RenderPipeline pipeline, int priority) {
+        if (pipelines.size() < 1) {
+            pipelines.add(new Tuple<>(pipeline, priority));
+        } else {
+            for (int i = 0; i <= pipelines.size(); i++) {
+                Tuple<RenderPipeline, Integer> tuple = i == pipelines.size() ? null : pipelines.get(i);
+                if (tuple == null || priority <= tuple.getB()) {
+                    pipelines.add(i, new Tuple<>(pipeline, priority));
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Adds the text at the top left of the screen. Lower priority number is higher on the list.
+     * FPS always appears at the top and cannot be overridden through this method.
+     *
+     * The list is cleared every frame, so you should call this on every update().
+     */
+    public static void addInfoText(String text, int priority) {
+        if (debugText.size() < 1) {
+            debugText.add(new Tuple<>(text, priority));
+        } else {
+            for (int i = 0; i <= debugText.size(); i++) {
+                Tuple<String, Integer> tuple = i == debugText.size() ? null : debugText.get(i);
+                if (tuple == null || priority <= tuple.getB()) {
+                    debugText.add(i, new Tuple<>(text, priority));
+                    break;
+                }
+            }
+        }
     }
 
     public static int getWidth() {

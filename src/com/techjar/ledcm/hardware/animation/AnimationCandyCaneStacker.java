@@ -20,7 +20,7 @@ public class AnimationCandyCaneStacker extends Animation {
 
     public AnimationCandyCaneStacker() {
         super();
-        topLayer = (long)Math.pow(2, dimension.y - 1);
+        topLayer = 1L << (dimension.y - 1);
         allLayers = (long)Math.pow(2, dimension.y) - 1;
     }
 
@@ -30,17 +30,17 @@ public class AnimationCandyCaneStacker extends Animation {
     }
 
     @Override
-    public void refresh() {
+    public synchronized void refresh() {
         if (ticks % 3 == 0) {
             if (layers != allLayers) {
                 if (curLayer == 0) {
                     curLayer = topLayer;
-                } else if ((layers | (curLayer >> 1)) == layers) {
+                } else if ((layers | (curLayer >>> 1)) == layers) {
                     layers |= curLayer;
                     curLayer = 0;
                     curLayerNum++;
                 } else {
-                    curLayer >>= 1;
+                    curLayer >>>= 1;
                 }
             }
             for (int y = 0; y < dimension.y; y++) {
@@ -55,7 +55,7 @@ public class AnimationCandyCaneStacker extends Animation {
     }
 
     @Override
-    public void reset() {
+    public synchronized void reset() {
         layers = 0;
         curLayerNum = 0;
     }

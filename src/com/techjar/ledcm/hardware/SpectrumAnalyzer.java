@@ -11,6 +11,7 @@ import com.techjar.ledcm.util.BufferHelper;
 import com.techjar.ledcm.util.MathHelper;
 import com.techjar.ledcm.util.PrintStreamRelayer;
 import com.techjar.ledcm.util.Timer;
+import com.techjar.ledcm.util.Util;
 import com.techjar.ledcm.util.logging.LogHelper;
 import ddf.minim.AudioListener;
 import ddf.minim.AudioPlayer;
@@ -290,8 +291,7 @@ public class SpectrumAnalyzer {
 
     public void loadFile(File file) {
         try {
-            File file2 = new File("resampled/" + file.getName().substring(0, file.getName().lastIndexOf('.')) + ".wav");
-            String path = file2.getAbsolutePath();
+            File file2 = new File("resampled/" + Util.getChecksum("SHA1", file.getCanonicalPath()) + ".wav");
             if (!file2.exists()) {
                 ProcessBuilder pb = new ProcessBuilder();
                 pb.directory(new File(System.getProperty("user.dir")));
@@ -309,12 +309,9 @@ public class SpectrumAnalyzer {
             if (player != null) {
                 player.close();
             }
-            AudioPlayer oldPlayer = player;
-            player = minim.loadFile(path);
+            player = minim.loadFile(file2.getAbsolutePath());
             LEDCubeManager.getLEDCube().getCommThread().getTcpServer().sendPacket(new PacketAudioInit(player.getFormat()));
-            String path2 = path.replaceAll("\\\\", "/");
-            currentTrack = path2.contains("/") ? path2.substring(path2.lastIndexOf('/') + 1) : path2;
-            currentTrack = currentTrack.substring(0, currentTrack.lastIndexOf('.'));
+            currentTrack = file.getName().substring(0, file.getName().lastIndexOf('.'));
             setVolume(LEDCubeManager.getInstance().getScreenMainControl().volumeSlider.getValue());
             fft = new FFT(player.bufferSize(), player.sampleRate());
             beatDetect = new BeatDetect(player.bufferSize(), player.sampleRate());
