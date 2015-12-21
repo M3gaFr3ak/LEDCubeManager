@@ -33,6 +33,11 @@ public class LEDCube {
     private boolean drawClick;
     private boolean postInited;
     private Vector3 cursorTrace;
+    private Matrix4f transform = new Matrix4f();
+    @Getter private Vector3f centerPoint;
+    @Getter private boolean reflectX;
+    @Getter private boolean reflectY;
+    @Getter private boolean reflectZ;
     @Getter private boolean trueColor;
     @Getter private CommThread commThread;
     @Getter private SpectrumAnalyzer spectrumAnalyzer;
@@ -41,6 +46,7 @@ public class LEDCube {
     @Getter private Vector3 paintSize = new Vector3(0, 0, 0);
     @Getter @Setter private int layerIsolation = 0;
     @Getter @Setter private int selectedLayer = 0;
+    @Getter @Setter private boolean previewTransform = true;
     @Getter private Model model;
 
     public LEDCube() {
