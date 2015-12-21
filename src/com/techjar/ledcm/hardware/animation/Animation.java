@@ -19,7 +19,7 @@ import com.techjar.ledcm.gui.GUISlider;
 import com.techjar.ledcm.gui.GUISpinner;
 import com.techjar.ledcm.gui.GUITextField;
 import com.techjar.ledcm.gui.screen.ScreenMainControl;
-import com.techjar.ledcm.hardware.LEDManager;
+import com.techjar.ledcm.hardware.manager.LEDManager;
 import com.techjar.ledcm.util.Dimension3D;
 import com.techjar.ledcm.util.Util;
 import java.util.HashMap;
@@ -115,6 +115,8 @@ public abstract class Animation {
                         final GUITextField textField = new GUITextField(screen.font, new Color(255, 255, 255), new GUIBackground(new Color(0, 0, 0), new Color(255, 0, 0), 2));
                         gui = textField;
                         textField.setText(optionValues.get(option.getId()));
+                        if (option.params.length >= 2) textField.setValidationRegex(option.params[1].toString());
+                        if (option.params.length >= 3) textField.setMaxLength(Integer.parseInt(option.params[2].toString()));
                         textField.setHeight(35);
                         textField.setCanLoseFocus(true);
                         textField.setChangeHandler(new GUICallback() {

@@ -24,13 +24,13 @@ import com.obj.WavefrontObject;
 import com.techjar.ledcm.gui.GUICallback;
 import com.techjar.ledcm.gui.screen.Screen;
 import com.techjar.ledcm.gui.screen.ScreenMainControl;
-import com.techjar.ledcm.hardware.LEDManager;
-import com.techjar.ledcm.hardware.ArduinoLEDManager;
+import com.techjar.ledcm.hardware.manager.LEDManager;
+import com.techjar.ledcm.hardware.manager.ArduinoLEDManager;
 import com.techjar.ledcm.hardware.CommThread;
 import com.techjar.ledcm.hardware.LEDUtil;
 import com.techjar.ledcm.hardware.SpectrumAnalyzer;
-import com.techjar.ledcm.hardware.TLC5940LEDManager;
-import com.techjar.ledcm.hardware.TestLEDManager;
+import com.techjar.ledcm.hardware.manager.TLC5940LEDManager;
+import com.techjar.ledcm.hardware.manager.TestLEDManager;
 import com.techjar.ledcm.hardware.animation.*;
 import com.techjar.ledcm.hardware.tcp.TCPServer;
 import com.techjar.ledcm.hardware.tcp.packet.Packet;
@@ -139,6 +139,7 @@ public class LEDCubeManager {
     //public static final int SCREEN_WIDTH = 1024;
     //public static final int SCREEN_HEIGHT = 768;
     @Getter private static LEDCubeManager instance;
+    @Getter private static File dataDirectory = OperatingSystem.getDataDirectory("ledcubemanager");
     @Getter private static DisplayMode displayMode /*= new DisplayMode(1024, 768)*/;
     private DisplayMode newDisplayMode;
     private DisplayMode configDisplayMode;
@@ -159,6 +160,9 @@ public class LEDCubeManager {
     @Getter private static Frustum frustum;
     @Getter private static JFileChooser fileChooser;
     @Getter private static String serialPortName = "COM3";
+    @Getter private static String portHandlerName = "SerialPortHandler";
+    @Getter private static String ledManagerName = null;
+    @Getter private static String[] ledManagerArgs = new String[0];
     @Getter private static int serverPort = 7545;
     @Getter private static FrameServer frameServer;
     @Getter private static SystemTray systemTray;
@@ -216,45 +220,70 @@ public class LEDCubeManager {
     public LEDCubeManager(String[] args) throws LWJGLException {
         instance = this;
         System.setProperty("sun.java2d.noddraw", "true");
-        LogHelper.init(new File(Constants.DATA_DIRECTORY, "logs"));
-        LongSleeperThread.startSleeper();
-
-        ArgumentParser.parse(args, new ArgumentParser.Argument(true, "--loglevel") {
+        ArgumentParser.parse(args, new ArgumentParser.Argument(true, "Specify logging detail level", "--loglevel") {
             @Override
             public void runAction(String parameter) {
                 LogHelper.setLevel(Level.parse(parameter));
             }
-        }, new ArgumentParser.Argument(false, "--showfps") {
+        }, new ArgumentParser.Argument(false, "Display frames per second", "--showfps") {
             @Override
             public void runAction(String parameter) {
                 renderFPS = true;
             }
-        }, new ArgumentParser.Argument(false, "--debug") {
+        }, new ArgumentParser.Argument(false, "Displaydebug output", "--debug") {
             @Override
             public void runAction(String parameter) {
                 debugMode = true;
             }
-        }, new ArgumentParser.Argument(false, "--debug-gl") {
+        }, new ArgumentParser.Argument(false, "Display OpenGL errors", "--debug-gl") {
             @Override
             public void runAction(String parameter) {
                 debugGL = true;
             }
-        }, new ArgumentParser.Argument(false, "--wireframe") {
+        }, new ArgumentParser.Argument(false, "Enable wireframe rendering", "--wireframe") {
             @Override
             public void runAction(String parameter) {
                 wireframe = true;
             }
-        }, new ArgumentParser.Argument(true, "--serialport") {
+        }, new ArgumentParser.Argument(true, "Specify serial port name\nArgs: <name>", "--serialport") {
             @Override
             public void runAction(String parameter) {
                 serialPortName = parameter;
             }
-        }, new ArgumentParser.Argument(true, "--serverport") {
+        }, new ArgumentParser.Argument(true, "Specify internal TCP server port\nArgs: <port number>", "--serverport") {
             @Override
             public void runAction(String parameter) {
                 serverPort = Integer.parseInt(parameter);
             }
+        }, new ArgumentParser.Argument(true, "Specify PortHandler class\nArgs: <class name>", "--porthandler") {
+            @Override
+            public void runAction(String parameter) {
+                portHandlerName = parameter;
+            }
+        }, new ArgumentParser.Argument(true, "Specify LEDManager class\nArgs: <class name and constructor parameters (comma-separated)>", "--ledmanager") {
+            @Override
+            public void runAction(String parameter) {
+                String[] split = parameter.split("(?<!,),");
+                for (int i = 0; i < split.length; i++) split[i] = split[i].replaceAll(",,", ",");
+                ledManagerName = split[0];
+                ledManagerArgs = new String[split.length - 1];
+                System.arraycopy(split, 1, ledManagerArgs, 0, split.length - 1);
+            }
+        }, new ArgumentParser.Argument(true, "Specify a custom directory for config/logs/etc.\nArgs: <directory path>", "--datadir") {
+            @Override
+            public void runAction(String parameter) {
+                dataDirectory = new File(parameter);
+                if (!dataDirectory.exists()) {
+                    if (!dataDirectory.mkdirs()) {
+                        System.out.println("Failed to create directory: " + dataDirectory);
+                        System.exit(0);
+                    }
+                }
+            }
         });
+
+        LogHelper.init(new File(dataDirectory, "logs"));
+        LongSleeperThread.startSleeper();
 
         Pbuffer pb = new Pbuffer(800, 600, new PixelFormat(32, 0, 24, 8, 0), null);
         pb.makeCurrent();
@@ -632,7 +661,7 @@ public class LEDCubeManager {
 
     private void initConfig() {
         if (displayMode == null) displayMode = new DisplayMode(1024, 768);
-        config = new ConfigManager(new File(Constants.DATA_DIRECTORY, "options.yml"), false);
+        config = new ConfigManager(new File(dataDirectory, "options.yml"), false);
         config.load();
         config.defaultProperty("display.width", displayMode.getWidth());
         config.defaultProperty("display.height", displayMode.getHeight());
@@ -964,7 +993,7 @@ public class LEDCubeManager {
             if (screenshot) {
                 screenshot = false;
                 SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss");
-                File screenshotDir = new File(Constants.DATA_DIRECTORY, "screenshots");
+                File screenshotDir = new File(dataDirectory, "screenshots");
                 screenshotDir.mkdirs();
                 File file = new File(screenshotDir, dateFormat.format(Calendar.getInstance().getTime()) + ".png");
                 for (int i = 2; file.exists(); i++) {
