@@ -1,5 +1,6 @@
-package com.techjar.ledcm.hardware;
+package com.techjar.ledcm.hardware.manager;
 
+import com.techjar.ledcm.hardware.LEDArray;
 import com.techjar.ledcm.util.Dimension3D;
 import com.techjar.ledcm.util.MathHelper;
 import com.techjar.ledcm.util.Vector3;
@@ -16,6 +17,10 @@ public class STP16Manager implements LEDManager {
     private byte[] green = new byte[512];
     private byte[] blue = new byte[512];
     private LEDArray ledArray;
+
+    public STP16Manager(String[] args) {
+        this(Boolean.parseBoolean(args[0]));
+    }
 
     public STP16Manager(boolean gammaCorrection) {
         this.gammaCorrection = gammaCorrection;

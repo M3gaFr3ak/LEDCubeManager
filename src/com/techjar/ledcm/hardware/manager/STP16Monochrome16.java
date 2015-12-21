@@ -1,5 +1,6 @@
-package com.techjar.ledcm.hardware;
+package com.techjar.ledcm.hardware.manager;
 
+import com.techjar.ledcm.hardware.LEDArray;
 import com.techjar.ledcm.util.Dimension3D;
 import com.techjar.ledcm.util.Vector3;
 import org.lwjgl.util.Color;
@@ -15,6 +16,10 @@ public class STP16Monochrome16 implements LEDManager {
     private byte[] green = new byte[4096];
     private byte[] blue = new byte[4096];
     private LEDArray ledArray;
+
+
+    public STP16Monochrome16(String[] args) {
+    }
 
     @Override
     public int getResolution() {
