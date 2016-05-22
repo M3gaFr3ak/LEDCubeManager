@@ -18,6 +18,7 @@ import com.techjar.ledcm.util.AxisAlignedBB;
 import com.techjar.ledcm.util.Dimension3D;
 import com.techjar.ledcm.util.Direction;
 import com.techjar.ledcm.util.LEDCubeOctreeNode;
+import com.techjar.ledcm.util.MathHelper;
 import com.techjar.ledcm.util.Model;
 import com.techjar.ledcm.util.Quaternion;
 import com.techjar.ledcm.util.Util;
@@ -25,6 +26,7 @@ import com.techjar.ledcm.util.Vector3;
 import com.techjar.ledcm.util.input.InputBinding;
 import com.techjar.ledcm.util.input.InputBindingManager;
 import com.techjar.ledcm.util.input.InputInfo;
+import com.techjar.ledcm.util.logging.LogHelper;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -40,6 +42,7 @@ import org.lwjgl.input.Controller;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.util.Color;
+import org.lwjgl.util.ReadableColor;
 import org.lwjgl.util.vector.Matrix4f;
 import org.lwjgl.util.vector.Vector3f;
 import org.lwjgl.util.vector.Vector4f;
@@ -58,6 +61,7 @@ public class LEDCube {
     private LEDCubeOctreeNode[] octrees;
     private int ledSpaceMult = 8;
     private boolean drawClick;
+    private ReadableColor drawColor;
     private boolean postInited;
     private Vector3 cursorTrace;
     private Matrix4f transform = new Matrix4f();
@@ -79,12 +83,11 @@ public class LEDCube {
     @SneakyThrows(Exception.class)
     public LEDCube() {
         if (LEDCubeManager.getLedManagerName() != null) {
-            for (String s : LEDCubeManager.getLedManagerArgs()) System.out.println(s);
             ledManager = (LEDManager)Class.forName("com.techjar.ledcm.hardware.manager." + LEDCubeManager.getLedManagerName()).getConstructor(String[].class).newInstance((Object)LEDCubeManager.getLedManagerArgs());
         } else {
-            ledManager = new ArduinoLEDManager(4, true);
+            ledManager = new ArduinoLEDManager(4, false);
             //ledManager = new TLC5940LEDManager(true);
-            //ledManager = new TestLEDManager(true, 16, 16, 16);
+            //ledManager = new TestLEDManager(true, 16, 16, 16, false, new Color(255, 0, 0));
         }
         Dimension3D dim = ledManager.getDimensions();
         centerPoint = new Vector3f((dim.x - 1) / 2F, (dim.y - 1) / 2F, (dim.z - 1) / 2F);
@@ -92,9 +95,9 @@ public class LEDCube {
         model = LEDCubeManager.getModelManager().getModel("led.model");
         initOctree();
         initBindings();
-        /*for (int i = 0; i < 64; i++) {
+        /*for (int i = 0; i < 256; i++) {
             double j = i;
-            LogHelper.info(Math.round(MathHelper.cie1931(j/63)*63));
+            LogHelper.info(i + " | " + Math.round(MathHelper.cie1931(i / 255D) * 4095D));
         }*/
     }
 
@@ -126,13 +129,13 @@ public class LEDCube {
         }
     }
 
-    private void paintLEDHighlight() {
+    private void paintLEDHighlight(ReadableColor color) {
         Dimension3D dim = ledManager.getDimensions();
         for (int x = 0; x < dim.x; x++) {
             for (int y = 0; y < dim.y; y++) {
                 for (int z = 0; z < dim.z; z++) {
                     if (highlight[Util.encodeCubeVector(x, y, z)]) {
-                        ledManager.setLEDColor(x, y, z, paintColor);
+                        ledManager.setLEDColor(x, y, z, color);
                     }
                 }
             }
@@ -153,7 +156,7 @@ public class LEDCube {
 
     public boolean processMouseEvent() {
         if (!Mouse.isGrabbed() && drawClick) {
-            paintLEDHighlight();
+            paintLEDHighlight(drawColor);
         }
         return !drawClick;
     }
@@ -165,11 +168,19 @@ public class LEDCube {
     public void update(float delta) {
         LEDCubeManager.addInfoText("Serial port: " + (commThread.isPortOpen() ? "open" : "closed"), 100);
         LEDCubeManager.addInfoText("TCP clients: " + commThread.getNumTCPClients(), 110);
-        LEDCubeManager.addInfoText("Current music: " + spectrumAnalyzer.getCurrentTrack(), 120);
-        LEDCubeManager.addInfoText("Music time: " + spectrumAnalyzer.getPositionMillis(), 130);
-        if (commThread.isFrozen()) LEDCubeManager.addInfoText("Animation Frozen", 140);
-        if (ledManager.getResolution() < 255) LEDCubeManager.addInfoText("Color mode: " + (trueColor ? "true" : "full"), 150);
-        LEDCubeManager.addInfoText("Hovered LED: " + (cursorTrace == null ? "none" : (int)cursorTrace.getX() + ", " + (int)cursorTrace.getY() + ", " + (int)cursorTrace.getZ()), 900);
+        if (!spectrumAnalyzer.getCurrentTrack().isEmpty()) {
+            LEDCubeManager.addInfoText("Music: " + spectrumAnalyzer.getCurrentTrack(), 120);
+            LEDCubeManager.addInfoText("Music time: " + spectrumAnalyzer.getPositionMillis(), 130);
+        }
+        if (commThread.getCurrentSequence() != null) LEDCubeManager.addInfoText("Sequence: " + commThread.getCurrentSequence().getName(), 140);
+        if (commThread.isFrozen()) LEDCubeManager.addInfoText("Animation Frozen", 150);
+        if (ledManager.getResolution() < 255) LEDCubeManager.addInfoText("Color mode: " + (trueColor ? "true" : "full"), 160);
+        if (cursorTrace == null) {
+            LEDCubeManager.addInfoText("Hovered LED: none", 900);
+        } else {
+            Color color = ledManager.getLEDColor((int)cursorTrace.getX(), (int)cursorTrace.getY(), (int)cursorTrace.getZ());
+            LEDCubeManager.addInfoText("Hovered LED: " + (int)cursorTrace.getX() + ", " + (int)cursorTrace.getY() + ", " + (int)cursorTrace.getZ() + " (" + color.getRed() + ", " + color.getGreen() + ", " + color.getBlue() + ")", 900);
+        }
     }
 
     public int render() {
@@ -330,8 +341,27 @@ public class LEDCube {
             @Override
             public boolean onPressed() {
                 if (!Mouse.isGrabbed()) {
+                    drawColor = paintColor;
                     drawClick = true;
-                    paintLEDHighlight();
+                    paintLEDHighlight(drawColor);
+                    return false;
+                }
+                return true;
+            }
+
+            @Override
+            public boolean onReleased() {
+                drawClick = false;
+                return true;
+            }
+        });
+        InputBindingManager.addBinding(new InputBinding("eraseleds", "Erase LEDs", "Cube", true, new InputInfo(InputInfo.Type.MOUSE, 2)) {
+            @Override
+            public boolean onPressed() {
+                if (!Mouse.isGrabbed()) {
+                    drawColor = ReadableColor.BLACK;
+                    drawClick = true;
+                    paintLEDHighlight(drawColor);
                     return false;
                 }
                 return true;
@@ -535,11 +565,10 @@ public class LEDCube {
         addAnimation(new AnimationSpectrumBars());
         addAnimation(new AnimationSpectrumShooters());
         //addAnimation(new AnimationIndividualTest());
-        addAnimation(new AnimationCharTest());
+        //addAnimation(new AnimationCharTest());
         addAnimation(new AnimationText());
         addAnimation(new AnimationStaticFill());
-        addAnimation(new AnimationPulsate());
-        addAnimation(new AnimationPulsateHue());
+        addAnimation(new AnimationGradient());
         addAnimation(new AnimationRandomize());
         addAnimation(new AnimationRain());
         addAnimation(new AnimationMatrix());
@@ -548,21 +577,19 @@ public class LEDCube {
         addAnimation(new AnimationStrobe());
         addAnimation(new AnimationSnake());
         addAnimation(new AnimationScrollers());
-        addAnimation(new AnimationProgressiveFill());
+        addAnimation(new AnimationDissolve());
         addAnimation(new AnimationSine());
-        addAnimation(new AnimationSineDouble());
         addAnimation(new AnimationStacker());
-        addAnimation(new AnimationRainbowStacker());
-        addAnimation(new AnimationCandyCaneStacker());
         addAnimation(new AnimationDrain());
         addAnimation(new AnimationFaucet());
-        addAnimation(new AnimationMultiFaucet());
-        addAnimation(new AnimationFaucetFill());
-        addAnimation(new AnimationFaucetFillRainbow());
         addAnimation(new AnimationSlidingBoxes());
         addAnimation(new AnimationBalls());
         addAnimation(new AnimationColorSpectrum());
         addAnimation(new AnimationSlidingPanels());
+        addAnimation(new AnimationFireworks());
+        addAnimation(new AnimationWalls());
+        addAnimation(new AnimationWireframe());
+        addAnimation(new AnimationWipe());
         for (Animation anim : animations.values()) {
             anim.postLoadInitOptions();
         }

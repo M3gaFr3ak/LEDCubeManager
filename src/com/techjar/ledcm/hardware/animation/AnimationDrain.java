@@ -70,4 +70,16 @@ public class AnimationDrain extends Animation {
         spreadZ = 0;
         state = false;
     }
+
+    @Override
+    public boolean isFinished() {
+        for (int x = 0; x < dimension.x; x++) {
+            for (int y = 0; y < dimension.y; y++) {
+                for (int z = 0; z < dimension.z; z++) {
+                    if (!ledManager.getLEDColor(x, y, z).equals(ReadableColor.BLACK)) return false;
+                }
+            }
+        }
+        return true;
+    }
 }

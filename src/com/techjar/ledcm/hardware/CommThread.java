@@ -7,7 +7,7 @@ import com.techjar.ledcm.ControlUtil;
 import com.techjar.ledcm.LEDCubeManager;
 import com.techjar.ledcm.gui.screen.ScreenMainControl;
 import com.techjar.ledcm.hardware.animation.Animation;
-import com.techjar.ledcm.hardware.animation.AnimationSequence;
+import com.techjar.ledcm.hardware.animation.sequence.AnimationSequence;
 import com.techjar.ledcm.hardware.tcp.TCPClient;
 import com.techjar.ledcm.hardware.tcp.packet.Packet;
 import com.techjar.ledcm.hardware.tcp.TCPServer;
@@ -74,43 +74,40 @@ public class CommThread extends Thread {
             long diff = System.nanoTime() - updateTime;
             if (diff >= interval) {
                 updateTime = System.nanoTime();
+                if (frameTimer.getMilliseconds() >= 1000) {
+                    fpsDisplay = fpsCounter;
+                    fpsCounter = 0;
+                    frameTimer.restart();
+                }
+                fpsCounter++;
+                ticks++;
                 if (!frozen) {
-                    if (frameTimer.getMilliseconds() >= 1000) {
-                        fpsDisplay = fpsCounter;
-                        fpsCounter = 0;
-                        frameTimer.restart();
-                    }
-                    fpsCounter++;
-                    ticks++;
-                    synchronized (lock) {
-                        if (currentSequence != null) currentSequence.update();
-                        if (currentAnimation != null) {
-                            try {
-                                currentAnimation.refresh();
-                                currentAnimation.incTicks();
-                            } catch (Exception ex) {
-                                ex.printStackTrace();
-                                currentAnimation = null;
-                            }
-                        }
-                    }
-                    ledManager.updateLEDArray();
-                    byte[] data = ledManager.getCommData();
-                    tcpServer.sendPacket(new PacketCubeFrame(data));
                     synchronized (lock) {
                         try {
-                            if (portHandler.isOpened()) {
-                                portHandler.writeBytes(data);
+                            if (currentSequence != null) currentSequence.update();
+                            if (currentAnimation != null) {
+                                currentAnimation.refresh();
+                                currentAnimation.incTicks();
                             }
                         } catch (Exception ex) {
                             ex.printStackTrace();
-                            closePort();
+                            currentAnimation = null;
+                            currentSequence = null;
                         }
                     }
-                } else {
-                    fpsCounter = 0;
-                    fpsDisplay = 0;
-                    ledManager.updateLEDArray();
+                }
+                ledManager.updateLEDArray();
+                byte[] data = ledManager.getCommData();
+                tcpServer.sendPacket(new PacketCubeFrame(data));
+                synchronized (lock) {
+                    try {
+                        if (portHandler.isOpened()) {
+                            portHandler.writeBytes(data);
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        closePort();
+                    }
                 }
             }
             else if (interval - diff > 1000000) {
