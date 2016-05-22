@@ -66,7 +66,6 @@ public class STP16Manager implements LEDManager {
         this.gammaCorrection = gammaCorrection;
     }
 
-    @Override
     public byte[] getCommData() {
         synchronized (this) {
             byte[] array = new byte[512 * 3];
@@ -91,7 +90,7 @@ public class STP16Manager implements LEDManager {
                         for (int ledX = 0; ledX < 8; ledX++) {
                             for (int ledY = 0; ledY < 8; ledY++) {
                                 if ((colors[ledX + 8 * ledY + 64 * layer + 512 * color] & (1 << bit)) > 0)
-                                    array[(ledX + 8 * color + 24 * bit + 192 * layer)] |= (1 << ledY);
+                                    array[(ledX + 8 * color + 24 * bit + 192 * (7-layer))] |= (1 << ledY);
                             }
                         }
                     }
