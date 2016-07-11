@@ -40,9 +40,13 @@ javadoc/
 archive/
 resampled/
 config.yml
+/.apt_generated
 
 # Keep This Shit
 !/lib/*.jar
 LEDCubeManager.iml
 ffmpeg.exe
 src/META-INF/MANIFEST.MF
+
+# Gradle junk
+.gradle
