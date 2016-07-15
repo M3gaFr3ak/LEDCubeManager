@@ -15,6 +15,7 @@ public class STP16Monochrome16 implements LEDManager {
     private byte[] red = new byte[4096];
     private byte[] green = new byte[4096];
     private byte[] blue = new byte[4096];
+    private byte[] greyscale = new byte[4096];
     private LEDArray ledArray;
 
 
@@ -64,7 +65,16 @@ public class STP16Monochrome16 implements LEDManager {
     @Override
     public byte[] getCommData() {
         synchronized (this) {
-            return new byte[1];
+            byte[] data = new byte[16 * 16 * 2];
+            for (int layer = 0; layer < 16; layer++) {
+                for (int x = 0, count = 0; x < 16; x++, count += 2) {
+                    for (int y = 0; y < 16; y++) {
+                        if (greyscale[layer * 256 + x * 16 + y] != 0)
+                            data[layer * 16 + (y <= 7 ? count : count + 1)] |= y <= 7 ? (1 << y) : (1 << (y - 8));
+                    }
+                }
+            }
+            return data;
         }
     }
 
@@ -113,6 +123,9 @@ public class STP16Monochrome16 implements LEDManager {
         red[i] = color.getRedByte();
         green[i] = color.getGreenByte();
         blue[i] = color.getBlueByte();
+        greyscale[i] = (byte) ((0.2125 * color.getRed()) + (0.7154 * color.getGreen()) + (0.0721 * color.getBlue()));
+        if (greyscale[i] != 0)
+            greyscale[i] = (byte) 0xFF;
     }
 
     @Override
@@ -132,6 +145,6 @@ public class STP16Monochrome16 implements LEDManager {
 
     @Override
     public int getBaudRate() {
-        return 921600;
+        return 921600;//TODO 2000000;
     }
 }

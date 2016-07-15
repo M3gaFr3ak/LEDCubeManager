@@ -1,6 +1,5 @@
 package com.techjar.ledcm.hardware.handler;
 
-import org.teleal.cling.binding.xml.Descriptor;
 import org.usb4java.*;
 
 import java.io.IOException;
