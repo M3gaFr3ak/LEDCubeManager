@@ -66,13 +66,19 @@ public class STP16Monochrome16 implements LEDManager {
     public byte[] getCommData() {
         synchronized (this) {
             byte[] data = new byte[16 * 16 * 2];
+            int[] dataBuffer = new int[16 * 16];
             for (int layer = 0; layer < 16; layer++) {
-                for (int x = 0, count = 0; x < 16; x++, count += 2) {
+                for (int x = 0; x < 16; x++) {
                     for (int y = 0; y < 16; y++) {
                         if (greyscale[layer * 256 + x * 16 + y] != 0)
-                            data[layer * 16 + (y <= 7 ? count : count + 1)] |= y <= 7 ? (1 << y) : (1 << (y - 8));
+                            dataBuffer[layer * 16 + x] |= 1 << y;
                     }
                 }
+            }
+
+            for (int i = 0, j = 0; i < 256; i++, j += 2) {
+                data[j + 1] = (byte) dataBuffer[i];
+                data[j] = (byte) (dataBuffer[i] >> 8);
             }
             return data;
         }
