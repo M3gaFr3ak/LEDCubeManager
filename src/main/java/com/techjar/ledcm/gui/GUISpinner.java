@@ -4,6 +4,7 @@ package com.techjar.ledcm.gui;
 import static org.lwjgl.opengl.GL11.*;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
 import com.techjar.ledcm.LEDCubeManager;
 import com.techjar.ledcm.render.RenderHelper;
 import com.techjar.ledcm.util.MathHelper;
@@ -157,7 +158,7 @@ public class GUISpinner extends GUI {
     }
 
     protected void updateValue(float value) {
-        this.value = MathHelper.clamp(Float.parseFloat(formatDecimal(value)), minValue, maxValue);
+        this.value = MathHelper.clamp(value, minValue, maxValue);
         setTextField(this.value);
     }
 
@@ -173,11 +174,16 @@ public class GUISpinner extends GUI {
     }
 
     protected String formatDecimal(float value) {
-        DecimalFormat df;
-        if (decimalPlaces > 0) df = new DecimalFormat("#." + Strings.repeat("#", decimalPlaces));
-        else df = new DecimalFormat("#");
-        df.setRoundingMode(RoundingMode.HALF_UP);
-        return df.format(value);
+        try{
+            DecimalFormat df;
+            if (decimalPlaces > 0) df = new DecimalFormat("#." + Strings.repeat("#", decimalPlaces));
+            else df = new DecimalFormat("#");
+            df.setRoundingMode(RoundingMode.HALF_UP);
+            return df.format(value);
+        }catch(Throwable e){
+
+        }
+        return "43.0";
     }
 
     public float getValue() {
