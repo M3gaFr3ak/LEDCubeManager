@@ -32,6 +32,7 @@ public class AnimationText extends Animation {
     private Color topColor = new Color(0, 255, 255);
     private Color bottomColor = new Color(255, 255, 0);
     private boolean finished = false;
+    private int offsetY = 0;
 
     public AnimationText() {
         super();
@@ -119,6 +120,12 @@ public class AnimationText extends Animation {
                             });
                             break;
                     }
+                    ch.applyTransform(new LEDCharacter.Transformer() {
+                        @Override
+                        public Vector3 transform(Vector3 vector) {
+                            return vector.add(new Vector3(0, offsetY, 0));
+                        }
+                    });
                     drawCharacter(ch);
                 }
             } else if (characters.length > 0) {
@@ -150,7 +157,7 @@ public class AnimationText extends Animation {
                 ch.applyTransform(new LEDCharacter.Transformer() {
                     @Override
                     public Vector3 transform(Vector3 vector) {
-                        return vector.add(new Vector3(dimension.x + scrollOffset, 0, 0));
+                        return vector.add(new Vector3(dimension.x + scrollOffset, offsetY, 0));
                     }
                 });
                 drawCharacter(ch);
@@ -185,6 +192,7 @@ public class AnimationText extends Animation {
             new AnimationOption("animmode", "Animation", AnimationOption.OptionType.COMBOBOX, new Object[]{animMode, 0, "Depth Scroll", 1, "Scroll", 2, "Fly Through", 3, "Fly In, Spin, Fly Out"}),
             new AnimationOption("speed", "Speed", AnimationOption.OptionType.SLIDER, new Object[]{(19 - (speed - 1)) / 19F, 1F / 19F}),
             new AnimationOption("text", "Text", AnimationOption.OptionType.TEXT, new Object[]{text, "^[\u0020-\u007E]*$", 100}),
+                new AnimationOption("yOffset", "Y-Offset", AnimationOption.OptionType.SLIDER, new Object[]{((offsetY)) / (float) ledManager.getDimensions().getY(), 1F / (float) (ledManager.getDimensions().getY() - 8)}),
         };
     }
 
@@ -210,6 +218,9 @@ public class AnimationText extends Animation {
             case "text":
                 text = value;
                 reset();
+                break;
+            case "yOffset":
+                offsetY = Math.round((ledManager.getDimensions().getY() - 8) * Float.parseFloat(value));
                 break;
         }
     }
